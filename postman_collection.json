@@ -1,0 +1,343 @@
+{
+  "info": {
+    "name": "Pixel Love API",
+    "description": "API collection for Pixel Love Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login with Google",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"accessToken\": \"your-google-oauth-token\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google"]
+            }
+          }
+        },
+        {
+          "name": "Login with Facebook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"facebook\",\n  \"accessToken\": \"your-facebook-oauth-token\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/facebook",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "facebook"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/user/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Name\",\n  \"mode\": \"couple\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/update",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "update"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Couple",
+      "item": [
+        {
+          "name": "Create Couple Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"petType\": \"cat\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/couple/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["couple", "create"]
+            }
+          }
+        },
+        {
+          "name": "Join Couple Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"ABC123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/couple/join",
+              "host": ["{{baseUrl}}"],
+              "path": ["couple", "join"]
+            }
+          }
+        },
+        {
+          "name": "Get Couple Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/couple/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["couple", "info"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pet",
+      "item": [
+        {
+          "name": "Get Pet Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pet/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["pet", "status"]
+            }
+          }
+        },
+        {
+          "name": "Feed Pet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pet/feed",
+              "host": ["{{baseUrl}}"],
+              "path": ["pet", "feed"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Memory",
+      "item": [
+        {
+          "name": "Upload Memory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                },
+                {
+                  "key": "type",
+                  "value": "image",
+                  "type": "text"
+                },
+                {
+                  "key": "note",
+                  "value": "Beautiful moment",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/memory/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["memory", "upload"]
+            }
+          }
+        },
+        {
+          "name": "List Memories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/memory/list?limit=50&skip=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["memory", "list"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "skip",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment",
+      "item": [
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coins\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payment/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["payment", "create"]
+            }
+          }
+        },
+        {
+          "name": "Payment History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payment/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["payment", "history"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
