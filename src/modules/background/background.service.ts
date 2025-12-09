@@ -11,7 +11,7 @@ import { Background, BackgroundDocument } from './schemas/background.schema';
 export class BackgroundService {
   // Default background constant
   private readonly DEFAULT_BACKGROUND = {
-    imageUrl: 'https://res.cloudinary.com/dinycjzzq/image/upload/v1765023599/du_an_thao-van_moi_ev4bzd.png',
+    imageUrl: 'https://res.cloudinary.com/dukoun1pb/image/upload/v1765298026/du_an_thao-van_background_moi_dvy474.png',
     width: 4096,
     height: 1920,
   };

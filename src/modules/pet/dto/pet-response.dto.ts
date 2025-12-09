@@ -120,3 +120,126 @@ export class PetImagesResponseDto {
   total: number;
 }
 
+export class BackgroundDto {
+  @ApiProperty({
+    description: 'Background image URL',
+    example: 'https://res.cloudinary.com/dukoun1pb/image/upload/v1765297673/Rectangle_12841_1_z50uay.png',
+  })
+  imageUrl: string;
+
+  @ApiProperty({
+    description: 'Background width in pixels',
+    example: 1242,
+  })
+  width: number;
+
+  @ApiProperty({
+    description: 'Background height in pixels',
+    example: 2688,
+  })
+  height: number;
+}
+
+export class ObjectDto {
+  @ApiProperty({
+    description: 'Object ID',
+    example: 'pet',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Object type',
+    example: 'pet',
+  })
+  type: string;
+
+  @ApiProperty({
+    description: 'Object image URL',
+    example: 'https://res.cloudinary.com/dukoun1pb/image/upload/v1765289116/Gemini_Generated_Image_73r7az73r7az73r7-removebg-preview_cfh0qt.png',
+  })
+  imageUrl: string;
+
+  @ApiProperty({
+    description: 'X position in pixels',
+    example: 371,
+  })
+  x: number;
+
+  @ApiProperty({
+    description: 'Y position in pixels',
+    example: 1094,
+  })
+  y: number;
+
+  @ApiProperty({
+    description: 'Object width in pixels',
+    example: 500,
+  })
+  width: number;
+
+  @ApiProperty({
+    description: 'Object height in pixels',
+    example: 500,
+  })
+  height: number;
+
+  @ApiProperty({
+    description: 'Z-index for layering',
+    example: 10,
+  })
+  zIndex: number;
+}
+
+export class PetStatusSceneDto {
+  @ApiProperty({
+    description: 'Current pet level',
+    example: 3,
+  })
+  level: number;
+
+  @ApiProperty({
+    description: 'Current experience points',
+    example: 270,
+  })
+  exp: number;
+
+  @ApiProperty({
+    description: 'Experience needed to reach next level',
+    example: 500,
+  })
+  expToNextLevel: number;
+
+  @ApiProperty({
+    description: 'Number of feeds (image actions) today',
+    example: 6,
+  })
+  todayFeedCount: number;
+
+  @ApiProperty({
+    description: 'Last feed time (ISO string)',
+    example: '2025-12-06T10:30:00.000Z',
+    nullable: true,
+  })
+  lastFeedTime: string | null;
+}
+
+export class PetSceneResponseDto {
+  @ApiProperty({
+    description: 'Background information',
+    type: BackgroundDto,
+  })
+  background: BackgroundDto;
+
+  @ApiProperty({
+    description: 'Objects in the scene',
+    type: [ObjectDto],
+  })
+  objects: ObjectDto[];
+
+  @ApiProperty({
+    description: 'Pet status information',
+    type: PetStatusSceneDto,
+  })
+  petStatus: PetStatusSceneDto;
+}
+

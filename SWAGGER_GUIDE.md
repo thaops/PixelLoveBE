@@ -41,7 +41,9 @@ http://localhost:3000/api/docs
 
 ### **User** (Cần JWT)
 - `GET /api/users/me` - Lấy profile hiện tại
+- `POST /api/users/onboard` - Hoàn tất onboarding (nickname, gender, birthDate)
 - `PUT /api/users/:userId` - Cập nhật profile
+- `DELETE /api/users/:userId` ⭐ **NEW!** - Xóa tài khoản (bao gồm hủy ghép đôi nếu có)
 
 ### **Couple** (Cần JWT)
 - `POST /api/couple/create-code` - Tạo mã ghép đôi

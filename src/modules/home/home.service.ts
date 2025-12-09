@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PetService } from '../pet/pet.service';
 import { RoomService } from '../room/room.service';
 import { BackgroundService } from '../background/background.service';
+import { ObjectService } from '../object/object.service';
 
 /**
  * Home Service
@@ -13,6 +14,7 @@ export class HomeService {
     private petService: PetService,
     private roomService: RoomService,
     private backgroundService: BackgroundService,
+    private objectService: ObjectService,
   ) {}
 
   /**
@@ -29,21 +31,13 @@ export class HomeService {
     // Get background (from room.backgroundId or default)
     const background = await this.backgroundService.getRoomBackground(room);
 
+    // Get objects (from room.objects or default)
+    const objects = this.objectService.getRoomObjects(room);
+
     // Return scene
     return {
       background,
-      objects: [
-        {
-          id: 'pet',
-          type: 'pet',
-          imageUrl: `https://default-pet-lv${petStatus.level}.png`,
-          x: 1800,
-          y: 1200,
-          width: 500,
-          height: 500,
-          zIndex: 10,
-        },
-      ],
+      objects,
       petStatus,
     };
   }

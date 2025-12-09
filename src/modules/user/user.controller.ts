@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Body, UseGuards, Param, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Body, UseGuards, Param, ForbiddenException } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -98,6 +98,66 @@ export class UserController {
     }
     await this.userService.updateProfile(user._id, updateUserDto);
     return { success: true };
+  }
+
+  /**
+   * DELETE /users/{userId}
+   * Delete user account (xóa toàn bộ thông tin kể cả hủy ghép đôi)
+   * 
+   * Khi xóa tài khoản:
+   * - Nếu user đang ở couple mode: tự động hủy ghép đôi, xóa CoupleRoom, reset partner về solo mode
+   * - Xóa toàn bộ thông tin user khỏi database
+   * - Emit WebSocket event để thông báo partner (nếu có)
+   */
+  @Delete(':userId')
+  @ApiOperation({ 
+    summary: 'Delete user account',
+    description: 'Xóa tài khoản user và toàn bộ thông tin liên quan. Nếu user đang ở couple mode, sẽ tự động hủy ghép đôi và reset partner về solo mode.',
+  })
+  @ApiParam({ 
+    name: 'userId', 
+    description: 'User ID của tài khoản cần xóa (phải là ID của chính user đang đăng nhập)',
+    example: 'u_12345',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tài khoản đã được xóa thành công',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { 
+          type: 'string', 
+          example: 'Account deleted successfully',
+          description: 'Thông báo xóa tài khoản thành công',
+        },
+        success: { 
+          type: 'boolean', 
+          example: true,
+          description: 'Trạng thái thành công',
+        },
+      },
+    },
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - Chưa đăng nhập hoặc token không hợp lệ',
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: 'Forbidden - Không thể xóa tài khoản của user khác. Chỉ có thể xóa tài khoản của chính mình.',
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Not Found - Không tìm thấy user với ID được cung cấp',
+  })
+  async deleteAccount(
+    @Param('userId') userId: string,
+    @CurrentUser() user: any,
+  ) {
+    if (userId !== user._id.toString()) {
+      throw new ForbiddenException('Cannot delete other user account');
+    }
+    return this.userService.deleteAccount(user._id);
   }
 }
 

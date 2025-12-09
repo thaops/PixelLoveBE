@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
@@ -6,6 +6,7 @@ import { CoupleRoom, CoupleRoomDocument } from '../couple/schemas/couple-room.sc
 import { UpdateUserDto } from './dto/update-user.dto';
 import { OnboardDto } from './dto/onboard.dto';
 import { calculateZodiac } from '../../shared/utils/zodiac.util';
+import { EventsGateway } from '../events/events.gateway';
 
 /**
  * User Service
@@ -13,9 +14,12 @@ import { calculateZodiac } from '../../shared/utils/zodiac.util';
  */
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(CoupleRoom.name) private coupleRoomModel: Model<CoupleRoomDocument>,
+    private eventsGateway: EventsGateway,
   ) {}
 
   /**
@@ -192,6 +196,67 @@ export class UserService {
       birthDate: updatedUser.birthDate,
       zodiac: updatedUser.zodiac,
       isOnboarded: updatedUser.isOnboarded,
+    };
+  }
+
+  /**
+   * Delete user account
+   * Xóa toàn bộ thông tin user, bao gồm cả hủy ghép đôi nếu đang ở couple mode
+   */
+  async deleteAccount(userId: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Nếu user đang ở couple mode, cần hủy ghép đôi trước
+    if (user.mode === 'couple' && user.partnerId && user.coupleRoomId) {
+      const partnerId = user.partnerId;
+      const coupleRoomId = user.coupleRoomId;
+
+      // Lấy thông tin partner trước khi xóa
+      const partner = await this.userModel.findById(partnerId);
+
+      // Xóa CoupleRoom
+      await this.coupleRoomModel.findByIdAndDelete(coupleRoomId);
+
+      // Reset partner về solo mode (nếu partner còn tồn tại)
+      if (partner) {
+        await this.userModel.findByIdAndUpdate(partnerId, {
+          mode: 'solo',
+          partnerId: null,
+          coupleRoomId: null,
+          coupleCode: null,
+          coupleCodeExpiresAt: null,
+        });
+
+        // Emit event để thông báo partner về việc account bị xóa
+        const accountDeletedEvent = {
+          message: 'Your partner has deleted their account',
+          timestamp: new Date(),
+          coupleRoomId: coupleRoomId,
+        };
+
+        this.eventsGateway.emitToUser(partnerId, 'partnerAccountDeleted', accountDeletedEvent);
+        this.eventsGateway.emitToCoupleRoom(coupleRoomId, 'coupleRoomDeleted', {
+          message: 'Couple room has been deleted due to account deletion',
+          timestamp: new Date(),
+        });
+      }
+
+      this.logger.log(
+        `User ${userId} deleted account, couple room ${coupleRoomId} removed, partner ${partnerId} reset to solo mode`,
+      );
+    }
+
+    // Xóa user
+    await this.userModel.findByIdAndDelete(userId);
+
+    this.logger.log(`User account ${userId} deleted successfully`);
+
+    return {
+      message: 'Account deleted successfully',
+      success: true,
     };
   }
 }

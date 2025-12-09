@@ -15,6 +15,7 @@ import {
   PettingResponseDto,
   SendImageResponseDto,
   PetImagesResponseDto,
+  PetSceneResponseDto,
 } from './dto/pet-response.dto';
 
 /**
@@ -161,6 +162,31 @@ export class PetController {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
     return this.petService.getImages(user, pageNum, limitNum);
+  }
+
+  /**
+   * GET /pet/scene
+   * Get pet scene (background + objects + pet status)
+   * Similar to /home but optimized for pet screen (1242x2688)
+   */
+  @Get('scene')
+  @ApiOperation({
+    summary: 'Get pet scene',
+    description:
+      'Returns pet scene with background (1242x2688), pet object position, and pet status. ' +
+      'Similar to /home endpoint but optimized for vertical pet screen display.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pet scene retrieved successfully',
+    type: PetSceneResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async getPetScene(@CurrentUser() user: any) {
+    return this.petService.getPetScene(user);
   }
 }
 

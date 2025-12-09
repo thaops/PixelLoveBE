@@ -4,6 +4,7 @@ import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { User, UserSchema } from './schemas/user.schema';
 import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.schema';
+import { EventsModule } from '../events/events.module';
 
 /**
  * User Module
@@ -15,6 +16,7 @@ import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.sche
       { name: User.name, schema: UserSchema },
       { name: CoupleRoom.name, schema: CoupleRoomSchema },
     ]),
+    EventsModule,
   ],
   controllers: [UserController],
   providers: [UserService],

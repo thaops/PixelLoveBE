@@ -309,4 +309,80 @@ export class PetService {
       total,
     };
   }
+
+  /**
+   * GET /pet/scene
+   * Get pet scene (background + objects + pet status)
+   * Similar to home scene but with pet-specific background size (1242x2688)
+   */
+  async getPetScene(user: any) {
+    // Get pet status
+    const petData = await this.getPet(user);
+
+    // Calculate todayFeedCount and lastFeedTime
+    let todayFeedCount = 0;
+    let lastFeedTime: string | null = null;
+
+    if (user.coupleRoomId) {
+      const { start, end } = this.getTodayDateRange();
+
+      // Count today's image actions (feed actions)
+      todayFeedCount = await this.petActionModel.countDocuments({
+        coupleId: user.coupleRoomId,
+        type: 'image',
+        createdAt: { $gte: start, $lte: end },
+      });
+
+      // Get last feed time (last image action)
+      const lastFeedAction = await this.petActionModel
+        .findOne({
+          coupleId: user.coupleRoomId,
+          type: 'image',
+        })
+        .sort({ createdAt: -1 })
+        .select('createdAt')
+        .lean();
+
+      if (lastFeedAction && (lastFeedAction as any).createdAt) {
+        lastFeedTime = (lastFeedAction as any).createdAt.toISOString();
+      }
+    }
+
+    // Pet background (1242 x 2688 for pet screen)
+    const background = {
+      imageUrl:
+        'https://res.cloudinary.com/dukoun1pb/image/upload/v1765298599/Rectangle_12841_2_d4ombo.png',
+      width: 1242,
+      height: 2688,
+    };
+
+    // Pet object position (centered for vertical screen)
+    const objects = [
+      {
+        id: 'pet',
+        type: 'pet',
+        imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1765289116/Gemini_Generated_Image_73r7az73r7az73r7-removebg-preview_cfh0qt.png`,
+        x: 371, // (1242 - 500) / 2 = 371 (centered horizontally)
+        y: 1194, // (2688 - 500) / 2 = 1094 (centered vertically)
+        width: 500,
+        height: 500,
+        zIndex: 10,
+      },
+    ];
+
+    // Format pet status
+    const petStatus = {
+      level: petData.level,
+      exp: petData.exp,
+      expToNextLevel: petData.nextLevelExp,
+      todayFeedCount,
+      lastFeedTime: lastFeedTime || null,
+    };
+
+    return {
+      background,
+      objects,
+      petStatus,
+    };
+  }
 }
