@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PET_IMAGE_MOODS, PetImageMood } from '../pet.constants';
 
 export class RecentImageDto {
   @ApiProperty({
@@ -74,7 +75,7 @@ export class SendImageResponseDto {
   expAdded: number;
 
   @ApiProperty({
-    description: 'Bonus EXP (20 if both users sent image today, 0 otherwise)',
+    description: 'Bonus EXP (20 if partner sent image within last 3 hours, 0 otherwise)',
     example: 20,
   })
   bonus: number;
@@ -84,6 +85,12 @@ export class SendImageResponseDto {
     example: false,
   })
   levelUp: boolean;
+
+  @ApiProperty({
+    description: 'Action ID of the created PetAction',
+    example: '507f1f77bcf86cd799439011',
+  })
+  actionId: string;
 }
 
 export class PetImageItemDto {
@@ -94,16 +101,56 @@ export class PetImageItemDto {
   imageUrl: string;
 
   @ApiProperty({
-    description: 'Creation timestamp',
-    example: '2025-12-06T10:30:00.000Z',
-  })
-  createdAt: Date;
-
-  @ApiProperty({
     description: 'User ID who uploaded the image',
     example: 'u_23871',
   })
   userId: string;
+
+  @ApiProperty({
+    description: 'Action timestamp (used for logic - cooldown, bonus)',
+    example: '2025-12-14T14:25:00.000Z',
+  })
+  actionAt: Date;
+
+  @ApiProperty({
+    description: 'Photo taken timestamp (optional, for timeline display)',
+    example: '2025-12-14T14:20:00.000Z',
+    nullable: true,
+  })
+  takenAt: Date | null;
+
+  @ApiProperty({
+    description: 'Base EXP gained',
+    example: 20,
+  })
+  baseExp: number;
+
+  @ApiProperty({
+    description: 'Bonus EXP gained',
+    example: 20,
+  })
+  bonusExp: number;
+
+  @ApiProperty({
+    description: 'Optional text/caption',
+    example: 'Cute moment!',
+    nullable: true,
+  })
+  text: string | null;
+
+  @ApiProperty({
+    description: 'Optional mood chip',
+    example: 'eat',
+    nullable: true,
+    enum: PET_IMAGE_MOODS,
+  })
+  mood: PetImageMood | null;
+
+  @ApiProperty({
+    description: 'Creation timestamp (for audit)',
+    example: '2025-12-14T14:25:00.000Z',
+  })
+  createdAt: Date;
 }
 
 export class PetImagesResponseDto {

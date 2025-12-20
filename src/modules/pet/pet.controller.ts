@@ -94,9 +94,8 @@ export class PetController {
     summary: 'Send image to pet',
     description:
       'Send an image to pet to gain EXP. Base: 20 EXP. ' +
-      'Bonus: +20 EXP if both users sent image today (same UTC day). ' +
-      'Image is saved to both PetAction history and shared Album. ' +
-      'No cooldown check - backend always accepts. UI should handle 3-hour cooldown display.',
+      'Bonus: +20 EXP if partner sent image within last 3 hours. ' +
+      'Image is saved to both PetAction history and shared Album.',
   })
   @ApiResponse({
     status: 200,
@@ -116,7 +115,13 @@ export class PetController {
     @CurrentUser() user: any,
     @Body() sendImageDto: SendImageDto,
   ) {
-    return this.petService.sendImage(user, sendImageDto.imageUrl);
+    return this.petService.sendImage(
+      user,
+      sendImageDto.imageUrl,
+      sendImageDto.takenAt,
+      sendImageDto.text,
+      sendImageDto.mood,
+    );
   }
 
   /**

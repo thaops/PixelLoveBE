@@ -6,6 +6,7 @@ import { Pet, PetSchema } from './schemas/pet.schema';
 import { PetAction, PetActionSchema } from './schemas/pet-action.schema';
 import { CoupleModule } from '../couple/couple.module';
 import { AlbumModule } from '../album/album.module';
+import { EventsModule } from '../events/events.module';
 
 /**
  * Pet Module
@@ -19,6 +20,7 @@ import { AlbumModule } from '../album/album.module';
     ]),
     forwardRef(() => CoupleModule),
     AlbumModule,
+    EventsModule,
   ],
   controllers: [PetController],
   providers: [PetService],

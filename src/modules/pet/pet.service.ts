@@ -5,6 +5,8 @@ import { Pet, PetDocument } from './schemas/pet.schema';
 import { PetAction, PetActionDocument } from './schemas/pet-action.schema';
 import { AlbumService } from '../album/album.service';
 import { CoupleService } from '../couple/couple.service';
+import { EventsGateway } from '../events/events.gateway';
+import { PET_IMAGE_MOODS, PetImageMood } from './pet.constants';
 
 /**
  * Pet Service
@@ -18,6 +20,7 @@ export class PetService {
   private readonly IMAGE_EXP = 20;
   private readonly IMAGE_BONUS = 20;
   private readonly RECENT_IMAGES_LIMIT = 5;
+  private readonly THREE_HOURS_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 
   constructor(
     @InjectModel(Pet.name) private petModel: Model<PetDocument>,
@@ -25,6 +28,7 @@ export class PetService {
     private petActionModel: Model<PetActionDocument>,
     private albumService: AlbumService,
     private coupleService: CoupleService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   /**
@@ -45,6 +49,7 @@ export class PetService {
 
   /**
    * Get today's date range (start and end of day in UTC)
+   * @deprecated Still used for petting bonus logic
    */
   private getTodayDateRange(): { start: Date; end: Date } {
     const now = new Date();
@@ -56,6 +61,71 @@ export class PetService {
     const end = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
     return { start, end };
+  }
+
+  /**
+   * Check cooldown for image action (3 hours) - with atomic check to prevent race condition
+   */
+  private async checkImageCooldown(
+    coupleId: string,
+    userId: string,
+  ): Promise<void> {
+    const now = new Date();
+    const threeHoursAgo = new Date(now.getTime() - this.THREE_HOURS_MS);
+
+    // Atomic check: find if there's any action within last 3 hours
+    const recentAction = await this.petActionModel.findOne({
+      coupleId,
+      userId,
+      type: 'image',
+      actionAt: { $gte: threeHoursAgo },
+    }).lean();
+
+    if (recentAction) {
+      const timeSinceLastAction = now.getTime() - recentAction.actionAt.getTime();
+      const remainingMs = this.THREE_HOURS_MS - timeSinceLastAction;
+      const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+      throw new BadRequestException(
+        `IMAGE_COOLDOWN: Please wait ${remainingMinutes} more minutes`,
+      );
+    }
+  }
+
+  /**
+   * Check if partner sent image within last 3 hours (for bonus)
+   * Returns the partner action if found, null otherwise
+   */
+  private async checkPartnerImageInLast3Hours(
+    coupleId: string,
+    currentUserId: string,
+  ): Promise<PetActionDocument | null> {
+    const now = new Date();
+    const threeHoursAgo = new Date(now.getTime() - this.THREE_HOURS_MS);
+
+    // Get partner ID
+    const coupleRoom = await this.coupleService.getRoomInfo(coupleId);
+    const currentUserIdStr = currentUserId.toString();
+    const partnerId =
+      coupleRoom.userA?.userId?.toString() === currentUserIdStr
+        ? coupleRoom.userB?.userId?.toString()
+        : coupleRoom.userA?.userId?.toString();
+
+    if (!partnerId) {
+      return null;
+    }
+
+    // Check partner's last image action within 3 hours
+    const partnerAction = await this.petActionModel
+      .findOne({
+        coupleId,
+        userId: partnerId,
+        type: 'image',
+        actionAt: { $gte: threeHoursAgo },
+      })
+      .sort({ actionAt: -1 })
+      .lean();
+
+    return partnerAction as PetActionDocument | null;
   }
 
   /**
@@ -134,23 +204,27 @@ export class PetService {
     const nextLevelExp =
       this.EXP_PER_LEVEL - (pet.experience % this.EXP_PER_LEVEL);
 
-    // Get recent images (last 5)
+    // Get recent images (last 5) - sort by actionAt (fallback to createdAt for old data)
     const recentActions = await this.petActionModel
       .find({
         coupleId: user.coupleRoomId,
         type: 'image',
         imageUrl: { $exists: true, $ne: null },
       })
-      .sort({ createdAt: -1 })
+      .sort({ actionAt: -1, createdAt: -1 }) // Sort by actionAt first, then createdAt as fallback
       .limit(this.RECENT_IMAGES_LIMIT)
-      .select('imageUrl userId createdAt')
+      .select('imageUrl userId actionAt createdAt')
       .lean();
 
-    const recentImages = recentActions.map((action) => ({
-      url: action.imageUrl,
-      createdAt: (action as any).createdAt || new Date(),
-      userId: action.userId,
-    }));
+    const recentImages = recentActions.map((action) => {
+      const createdAt = (action as any).createdAt || new Date();
+      const actionAt = action.actionAt || createdAt; // Fallback to createdAt for old data
+      return {
+        url: action.imageUrl,
+        createdAt: actionAt, // Use actionAt for display (fallback to createdAt)
+        userId: action.userId,
+      };
+    });
 
     return {
       level: pet.level,
@@ -208,66 +282,133 @@ export class PetService {
 
   /**
    * POST /pet/image
-   * Send image to pet
+   * Send image to pet with proper cooldown and bonus logic
    * 
-   * Note: Backend does NOT check 3-hour cooldown - UI handles this.
-   * Users can send any image URL (no content validation).
-   * The 3-hour limit is enforced by UI only for better UX.
+   * Logic:
+   * - Cooldown: 3 hours between image actions (enforced by backend)
+   * - Bonus: +20 EXP if partner sent image within last 3 hours
+   * - Base: 20 EXP per image
+   * - Image saved to both PetAction history and shared Album
    */
-  async sendImage(user: any, imageUrl: string) {
+  async sendImage(
+    user: any,
+    imageUrl: string,
+    takenAt?: string,
+    text?: string,
+    mood?: string,
+  ) {
     if (!user.coupleRoomId) {
       throw new BadRequestException('No couple found');
     }
 
-    // Only validate URL format, not content or cooldown
+    // Validate URL format
     if (!imageUrl.startsWith('http')) {
       throw new BadRequestException('Invalid image url');
     }
 
     const pet = await this.getPetForCouple(user.coupleRoomId);
     const userId = user._id.toString();
+    const now = new Date();
 
-    // Log action
-    await this.petActionModel.create({
+    // Sanitize mood: allow only predefined values, else null
+    const cleanedMood = PET_IMAGE_MOODS.includes(mood as PetImageMood)
+      ? (mood as PetImageMood)
+      : null;
+
+    // 👇 BƯỚC 1: Cooldown removed (cho phép gửi tự do)
+
+    // 👇 BƯỚC 2: Check bonus (partner sent image within 3 hours)
+    const partnerAction = await this.checkPartnerImageInLast3Hours(
+      user.coupleRoomId,
+      userId,
+    );
+
+    // 👇 BƯỚC 3: Calculate EXP
+    const baseExp = this.IMAGE_EXP; // 20
+    const bonusExp = partnerAction ? this.IMAGE_BONUS : 0; // 20 or 0
+    const totalExp = baseExp + bonusExp;
+
+    // 👇 BƯỚC 4: Process takenAt (clamp to now if future)
+    let takenAtDate: Date | undefined = undefined;
+    if (takenAt) {
+      takenAtDate = new Date(takenAt);
+      // Clamp: không cho future date
+      if (takenAtDate > now) {
+        takenAtDate = now;
+      }
+    }
+
+    // 👇 BƯỚC 5: Save action với đầy đủ thông tin
+    const actionAt = now; // Thời điểm logic
+    const savedAction = await this.petActionModel.create({
       coupleId: user.coupleRoomId,
       userId,
       type: 'image',
       imageUrl,
+      actionAt,
+      takenAt: takenAtDate,
+      baseExp,
+      bonusExp,
+      text,
+      mood: cleanedMood,
     });
 
-    // Also save to album (shared album)
+    // 👇 BƯỚC 6: Save to album (shared album)
     await this.albumService.addPhoto(user, imageUrl);
 
-    // Calculate EXP
-    let expGained = this.IMAGE_EXP;
-    let bonus = 0;
-
-    // Check bonus (both users sent image today)
-    const bothSentImage = await this.checkBothUsersDidActionToday(
-      user.coupleRoomId,
-      userId,
-      'image',
-    );
-
-    if (bothSentImage) {
-      bonus = this.IMAGE_BONUS;
-      expGained += bonus;
-    }
-
-    // Apply EXP and check level up
-    const leveledUp = this.applyExp(pet, expGained);
+    // 👇 BƯỚC 7: Apply EXP and check level up
+    const leveledUp = this.applyExp(pet, totalExp);
     await pet.save();
 
+    // 👇 BƯỚC 8: Emit socket event to couple room
+    // Event: 'pet:image_consumed'
+    // Emitted to: couple:{coupleRoomId} room (both users receive it)
+    // Payload format:
+    // {
+    //   petId: string,
+    //   actionId: string,
+    //   fromUserId: string,
+    //   expAdded: number,
+    //   baseExp: number,
+    //   bonusExp: number,
+    //   leveledUp: boolean,
+    //   pet: { level: number, currentExp: number },
+    //   actionAt: string (ISO)
+    // }
+    this.eventsGateway.emitToCoupleRoom(
+      user.coupleRoomId,
+      'pet:image_consumed',
+      {
+        petId: pet._id.toString(),
+        actionId: savedAction._id.toString(),
+        imageUrl,
+        fromUserId: userId,
+        expAdded: totalExp,
+        baseExp,
+        bonusExp,
+        leveledUp,
+        pet: {
+          level: pet.level,
+          currentExp: pet.experience,
+        },
+        actionAt: actionAt.toISOString(),
+        mood: cleanedMood || null,
+        text: text || null,
+      },
+    );
+
     return {
-      expAdded: expGained,
-      bonus,
+      expAdded: totalExp,
+      bonus: bonusExp,
       levelUp: leveledUp,
+      actionId: savedAction._id.toString(),
     };
   }
 
   /**
    * GET /pet/images
    * Get pet images gallery with pagination
+   * Returns full information including EXP and timestamps
    */
   async getImages(user: any, page: number = 1, limit: number = 20) {
     if (!user.coupleRoomId) {
@@ -286,10 +427,12 @@ export class PetService {
           type: 'image',
           imageUrl: { $exists: true, $ne: null },
         })
-        .sort({ createdAt: -1 })
+        .sort({ actionAt: -1 }) // Sort by actionAt (fallback to createdAt for old data)
         .skip(skip)
         .limit(limit)
-        .select('imageUrl userId createdAt')
+        .select(
+          'imageUrl userId actionAt takenAt baseExp bonusExp text mood createdAt',
+        )
         .lean(),
       this.petActionModel.countDocuments({
         coupleId: user.coupleRoomId,
@@ -298,11 +441,22 @@ export class PetService {
       }),
     ]);
 
-    const items = actions.map((action) => ({
-      imageUrl: action.imageUrl,
-      createdAt: (action as any).createdAt || new Date(),
-      userId: action.userId,
-    }));
+    const items = actions.map((action) => {
+      const createdAt = (action as any).createdAt || new Date();
+      const actionAt = action.actionAt || createdAt; // Fallback to createdAt for old data
+      
+      return {
+        imageUrl: action.imageUrl,
+        userId: action.userId,
+        actionAt, // Thời điểm logic
+        takenAt: action.takenAt || null, // Thời điểm chụp (optional)
+        baseExp: action.baseExp || 0, // Fallback to 0 for old data
+        bonusExp: action.bonusExp || 0, // Fallback to 0 for old data
+        text: action.text || null,
+        mood: action.mood || null,
+        createdAt, // Audit timestamp
+      };
+    });
 
     return {
       items,
@@ -351,9 +505,9 @@ export class PetService {
     // Pet background (1242 x 2688 for pet screen)
     const background = {
       imageUrl:
-        'https://res.cloudinary.com/dukoun1pb/image/upload/v1765298599/Rectangle_12841_2_d4ombo.png',
-      width: 1242,
-      height: 2688,
+        'https://res.cloudinary.com/dukoun1pb/image/upload/v1765727778/back_ground_pet_ph%C3%A1t_h%E1%BB%8Da_qjdpqx.png',
+      width: 2048,
+      height: 2048,
     };
 
     // Pet object position (centered for vertical screen)
@@ -361,11 +515,11 @@ export class PetService {
       {
         id: 'pet',
         type: 'pet',
-        imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1765289116/Gemini_Generated_Image_73r7az73r7az73r7-removebg-preview_cfh0qt.png`,
-        x: 371, // (1242 - 500) / 2 = 371 (centered horizontally)
-        y: 1194, // (2688 - 500) / 2 = 1094 (centered vertically)
-        width: 500,
-        height: 500,
+        imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1765727783/pet_level_1_zlsahy.png`,
+        x: 850, 
+        y: 870, 
+        width: 400,
+        height: 400,
         zIndex: 10,
       },
     ];
