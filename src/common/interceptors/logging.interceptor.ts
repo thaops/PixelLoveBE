@@ -31,20 +31,27 @@ export class LoggingInterceptor implements NestInterceptor {
     // Sanitize sensitive data from body
     const sanitizedBody = this.sanitizeBody(body);
 
+    // Ensure all values have defaults to avoid TypeScript errors
+    const safeMethod = method || 'UNKNOWN';
+    const safeUrl = originalUrl || '/';
+    const safeIp = ip || request.socket.remoteAddress || 'Unknown';
+    const safeUserAgent = typeof userAgent === 'string' ? userAgent : 'Unknown';
+
     // Log incoming request
-    this.logRequest(method, originalUrl, ip, userAgent, userId, sanitizedBody);
+    this.logRequest(safeMethod, safeUrl, safeIp, safeUserAgent, userId, sanitizedBody);
 
     return next.handle().pipe(
       tap({
         next: (data) => {
           const responseTime = Date.now() - startTime;
           const statusCode = response.statusCode;
-          this.logResponse(method, originalUrl, statusCode, responseTime, userId, 'Success');
+          this.logResponse(safeMethod, safeUrl, statusCode, responseTime, userId, 'Success');
         },
         error: (error) => {
           const responseTime = Date.now() - startTime;
           const statusCode = error.status || 500;
-          this.logError(method, originalUrl, statusCode, responseTime, userId, error.message);
+          const errorMessage = error.message || 'Unknown error';
+          this.logError(safeMethod, safeUrl, statusCode, responseTime, userId, errorMessage);
         },
       }),
     );
