@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 /**
  * Bootstrap function
@@ -27,6 +28,9 @@ async function bootstrap() {
       transform: true, // Automatically transform payloads to DTO instances
     }),
   );
+
+  // Global logging interceptor for all API requests
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Swagger Configuration
   const config = new DocumentBuilder()
