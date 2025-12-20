@@ -505,7 +505,7 @@ export class PetService {
     // Pet background (1242 x 2688 for pet screen)
     const background = {
       imageUrl:
-        'https://res.cloudinary.com/dukoun1pb/image/upload/v1765727778/back_ground_pet_ph%C3%A1t_h%E1%BB%8Da_qjdpqx.png',
+        'https://res.cloudinary.com/dukoun1pb/image/upload/v1766225460/back_ground_pet_sxwleg.png',
       width: 2048,
       height: 2048,
     };
