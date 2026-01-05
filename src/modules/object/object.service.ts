@@ -18,6 +18,28 @@ export class ObjectService {
       height: 500,
       zIndex: 10,
     },
+
+    {
+      id: 'fridge',
+      type: 'fridge',
+      imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1767420371/874a8a25-e65a-45e8-a50d-85048bdf76b6_pa00lu.png`,
+      x: 2600,
+      y: 410,
+      width: 700,
+      height: 1000,
+      zIndex: 10,
+    },
+
+    {
+      id: 'img-couple',
+      type: 'img-couple',
+      imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1767419512/t%E1%BA%A3i_xu%E1%BB%91ng_ofgtla.png`,
+      x: 1100,
+      y: 100,
+      width: 300,
+      height: 300,
+      zIndex: 10,
+    }
   ];
 
   /**

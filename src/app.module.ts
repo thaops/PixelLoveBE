@@ -15,6 +15,7 @@ import { HomeModule } from './modules/home/home.module';
 import { EventsModule } from './modules/events/events.module';
 import { RoomModule } from './modules/room/room.module';
 import { BackgroundModule } from './modules/background/background.module';
+import { FridgeModule } from './modules/fridge/fridge.module';
 
 /**
  * App Module
@@ -45,6 +46,7 @@ import { BackgroundModule } from './modules/background/background.module';
     EventsModule,
     RoomModule,
     BackgroundModule,
+    FridgeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
