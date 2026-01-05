@@ -15,17 +15,17 @@ import { CreateNoteDto } from './dto/create-note.dto';
  * Handles Home - Fridge endpoints
  */
 @ApiTags('Fridge')
-@Controller()
+@Controller('fridge')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class FridgeController {
   constructor(private readonly fridgeService: FridgeService) {}
 
   /**
-   * GET /v1/home/fridge
+   * GET /fridge/home
    * Get fridge home data (background + 2 latest notes)
    */
-  @Get('v1/home/fridge')
+  @Get('home')
   @ApiOperation({
     summary: 'Get fridge home data',
     description:
@@ -82,10 +82,10 @@ export class FridgeController {
   }
 
   /**
-   * POST /v1/fridge/note
+   * POST /fridge/note
    * Create a new fridge note
    */
-  @Post('v1/fridge/note')
+  @Post('note')
   @ApiOperation({
     summary: 'Create a new fridge note',
     description:

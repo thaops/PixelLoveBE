@@ -86,12 +86,14 @@ export class FridgeService {
         Math.floor(Math.random() * this.NOTE_FRAMES.length)
       ];
 
-    // Generate random rotation (-5 to +5 degrees)
-    const rotation = Math.random() * 10 - 5; // -5 to +5
+    // Note mặt đinh không xoay trục
+    const rotation = 0;
 
-    // Generate random position (x, y between 0.2 and 0.8 to avoid edges)
-    const positionX = 0.2 + Math.random() * 0.6; // 0.2 to 0.8
-    const positionY = 0.2 + Math.random() * 0.6; // 0.2 to 0.8
+    // Position mapping:
+    // - Note mới nhất (zIndex cao) → Cánh dưới: y ~0.55-0.62
+    // - position.x: random quanh trung tâm, khoảng 0.4-0.6
+    const positionX = 0.4 + Math.random() * 0.2; // 0.4 to 0.6
+    const positionY = 0.55 + Math.random() * 0.07; // 0.55 to 0.62 (cánh dưới)
 
     // Create note in database
     const note = await this.fridgeNoteModel.create({
