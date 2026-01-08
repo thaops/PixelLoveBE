@@ -20,6 +20,17 @@ export class ObjectService {
     },
 
     {
+      id: 'radio',
+      type: 'radio',
+      imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1767853620/image-removebg-preview_9_nnrmzi.png`,
+      x: 1500,
+      y: 1360,
+      width: 300,
+      height: 300,
+      zIndex: 10,
+    },
+
+    {
       id: 'fridge',
       type: 'fridge',
       imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1767420371/874a8a25-e65a-45e8-a50d-85048bdf76b6_pa00lu.png`,
@@ -40,16 +51,6 @@ export class ObjectService {
       height: 300,
       zIndex: 10,
     },
-    {
-      id: 'radio',
-      type: 'radio',
-      imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1767853620/image-removebg-preview_9_nnrmzi.png`,
-      x: 950,
-      y: 930,
-      width: 300,
-      height: 300,
-      zIndex: 10,
-    }
   ];
 
   /**
