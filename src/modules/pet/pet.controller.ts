@@ -10,11 +10,14 @@ import { PetService } from './pet.service';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { SendImageDto } from './dto/send-image.dto';
+import { SendVoiceDto } from './dto/send-voice.dto';
 import {
   PetStatusResponseDto,
   PettingResponseDto,
   SendImageResponseDto,
+  SendVoiceResponseDto,
   PetImagesResponseDto,
+  PetVoicesResponseDto,
   PetSceneResponseDto,
 } from './dto/pet-response.dto';
 
@@ -27,7 +30,7 @@ import {
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class PetController {
-  constructor(private readonly petService: PetService) {}
+  constructor(private readonly petService: PetService) { }
 
   /**
    * GET /pet
@@ -169,11 +172,83 @@ export class PetController {
     return this.petService.getImages(user, pageNum, limitNum);
   }
 
-  /**
-   * GET /pet/scene
-   * Get pet scene (background + objects + pet status)
-   * Similar to /home but optimized for pet screen (1242x2688)
-   */
+  @Post('voice')
+  @ApiOperation({
+    summary: 'Send voice message to pet',
+    description:
+      'Send a voice message to pet to gain EXP. Base: 15 EXP. ' +
+      'Bonus: +15 EXP if partner sent voice within last 3 hours. ' +
+      'Voice is saved to PetAction history.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Voice sent successfully',
+    type: SendVoiceResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request - User is not in a couple or invalid audio URL/duration',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async sendVoice(
+    @CurrentUser() user: any,
+    @Body() sendVoiceDto: SendVoiceDto,
+  ) {
+    return this.petService.sendVoice(
+      user,
+      sendVoiceDto.audioUrl,
+      sendVoiceDto.duration,
+      sendVoiceDto.takenAt,
+      sendVoiceDto.text,
+      sendVoiceDto.mood,
+    );
+  }
+
+  @Get('voices')
+  @ApiOperation({
+    summary: 'Get pet voice messages gallery',
+    description:
+      'Get paginated list of all voice messages sent to pet. ' +
+      'Sorted by creation date (newest first). ' +
+      'If user is not in a couple, returns empty array.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number (starts from 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 20,
+    description: 'Number of items per page (default: 20)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Voice messages retrieved successfully',
+    type: PetVoicesResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async getVoices(
+    @CurrentUser() user: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+    return this.petService.getVoices(user, pageNum, limitNum);
+  }
+
   @Get('scene')
   @ApiOperation({
     summary: 'Get pet scene',

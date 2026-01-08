@@ -23,13 +23,14 @@ export class FridgeController {
 
   /**
    * GET /fridge/home
-   * Get fridge home data (background + 2 latest notes)
+   * Get fridge home data (background + 4 latest notes)
    */
   @Get('home')
   @ApiOperation({
     summary: 'Get fridge home data',
     description:
-      'Returns fridge background and 2 latest notes. ' +
+      'Returns fridge background and 4 latest notes. ' +
+      'All notes are positioned on the board (fixed positions). ' +
       'Only available for users in a couple.',
   })
   @ApiResponse({

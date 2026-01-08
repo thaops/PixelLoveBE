@@ -27,7 +27,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 @ApiTags('Cloudinary')
 @Controller('cloudinary')
 export class CloudinaryController {
-  constructor(private readonly cloudinaryService: CloudinaryService) {}
+  constructor(private readonly cloudinaryService: CloudinaryService) { }
 
   /**
    * GET /cloudinary/signature
@@ -137,11 +137,17 @@ export class CloudinaryController {
       'image/webp',
       'video/mp4',
       'video/quicktime',
+      'audio/m4a',
+      'audio/aac',
+      'audio/mp3',
+      'audio/mpeg',
+      'audio/wav',
+      'audio/x-m4a',
     ];
 
     if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        'Invalid file type. Allowed: jpg, png, gif, webp, mp4, mov',
+        'Invalid file type. Allowed: jpg, png, gif, webp, mp4, mov, m4a, mp3, wav',
       );
     }
 

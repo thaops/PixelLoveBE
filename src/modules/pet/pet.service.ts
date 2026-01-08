@@ -19,6 +19,8 @@ export class PetService {
   private readonly PETTING_BONUS = 5;
   private readonly IMAGE_EXP = 20;
   private readonly IMAGE_BONUS = 20;
+  private readonly VOICE_EXP = 15;
+  private readonly VOICE_BONUS = 15;
   private readonly RECENT_IMAGES_LIMIT = 5;
   private readonly THREE_HOURS_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 
@@ -29,7 +31,7 @@ export class PetService {
     private albumService: AlbumService,
     private coupleService: CoupleService,
     private eventsGateway: EventsGateway,
-  ) {}
+  ) { }
 
   /**
    * Get or create pet for couple
@@ -120,6 +122,61 @@ export class PetService {
         coupleId,
         userId: partnerId,
         type: 'image',
+        actionAt: { $gte: threeHoursAgo },
+      })
+      .sort({ actionAt: -1 })
+      .lean();
+
+    return partnerAction as PetActionDocument | null;
+  }
+
+  private async checkVoiceCooldown(
+    coupleId: string,
+    userId: string,
+  ): Promise<void> {
+    const now = new Date();
+    const threeHoursAgo = new Date(now.getTime() - this.THREE_HOURS_MS);
+
+    const recentAction = await this.petActionModel.findOne({
+      coupleId,
+      userId,
+      type: 'voice',
+      actionAt: { $gte: threeHoursAgo },
+    }).lean();
+
+    if (recentAction) {
+      const timeSinceLastAction = now.getTime() - recentAction.actionAt.getTime();
+      const remainingMs = this.THREE_HOURS_MS - timeSinceLastAction;
+      const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+      throw new BadRequestException(
+        `VOICE_COOLDOWN: Please wait ${remainingMinutes} more minutes`,
+      );
+    }
+  }
+
+  private async checkPartnerVoiceInLast3Hours(
+    coupleId: string,
+    currentUserId: string,
+  ): Promise<PetActionDocument | null> {
+    const now = new Date();
+    const threeHoursAgo = new Date(now.getTime() - this.THREE_HOURS_MS);
+
+    const coupleRoom = await this.coupleService.getRoomInfo(coupleId);
+    const currentUserIdStr = currentUserId.toString();
+    const partnerId =
+      coupleRoom.userA?.userId?.toString() === currentUserIdStr
+        ? coupleRoom.userB?.userId?.toString()
+        : coupleRoom.userA?.userId?.toString();
+
+    if (!partnerId) {
+      return null;
+    }
+
+    const partnerAction = await this.petActionModel
+      .findOne({
+        coupleId,
+        userId: partnerId,
+        type: 'voice',
         actionAt: { $gte: threeHoursAgo },
       })
       .sort({ actionAt: -1 })
@@ -444,7 +501,7 @@ export class PetService {
     const items = actions.map((action) => {
       const createdAt = (action as any).createdAt || new Date();
       const actionAt = action.actionAt || createdAt; // Fallback to createdAt for old data
-      
+
       return {
         imageUrl: action.imageUrl,
         userId: action.userId,
@@ -516,8 +573,8 @@ export class PetService {
         id: 'pet',
         type: 'pet',
         imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1765727783/pet_level_1_zlsahy.png`,
-        x: 850, 
-        y: 870, 
+        x: 850,
+        y: 870,
         width: 400,
         height: 400,
         zIndex: 10,
@@ -537,6 +594,155 @@ export class PetService {
       background,
       objects,
       petStatus,
+    };
+  }
+
+  async sendVoice(
+    user: any,
+    audioUrl: string,
+    duration: number,
+    takenAt?: string,
+    text?: string,
+    mood?: string,
+  ) {
+    if (!user.coupleRoomId) {
+      throw new BadRequestException('No couple found');
+    }
+
+    if (!audioUrl.startsWith('http')) {
+      throw new BadRequestException('Invalid audio url');
+    }
+
+    if (duration <= 0 || duration > 60) {
+      throw new BadRequestException('Duration must be between 1 and 60 seconds');
+    }
+
+    const pet = await this.getPetForCouple(user.coupleRoomId);
+    const userId = user._id.toString();
+    const now = new Date();
+
+    const cleanedMood = PET_IMAGE_MOODS.includes(mood as PetImageMood)
+      ? (mood as PetImageMood)
+      : null;
+
+    const partnerAction = await this.checkPartnerVoiceInLast3Hours(
+      user.coupleRoomId,
+      userId,
+    );
+
+    const baseExp = this.VOICE_EXP;
+    const bonusExp = partnerAction ? this.VOICE_BONUS : 0;
+    const totalExp = baseExp + bonusExp;
+
+    let takenAtDate: Date | undefined = undefined;
+    if (takenAt) {
+      takenAtDate = new Date(takenAt);
+      if (takenAtDate > now) {
+        takenAtDate = now;
+      }
+    }
+
+    const actionAt = now;
+    const savedAction = await this.petActionModel.create({
+      coupleId: user.coupleRoomId,
+      userId,
+      type: 'voice',
+      audioUrl,
+      duration,
+      actionAt,
+      takenAt: takenAtDate,
+      baseExp,
+      bonusExp,
+      text,
+      mood: cleanedMood,
+    });
+
+    const leveledUp = this.applyExp(pet, totalExp);
+    await pet.save();
+
+    this.eventsGateway.emitToCoupleRoom(
+      user.coupleRoomId,
+      'pet:voice_consumed',
+      {
+        petId: pet._id.toString(),
+        actionId: savedAction._id.toString(),
+        audioUrl,
+        duration,
+        fromUserId: userId,
+        expAdded: totalExp,
+        baseExp,
+        bonusExp,
+        leveledUp,
+        pet: {
+          level: pet.level,
+          currentExp: pet.experience,
+        },
+        actionAt: actionAt.toISOString(),
+        mood: cleanedMood || null,
+        text: text || null,
+      },
+    );
+
+    return {
+      expAdded: totalExp,
+      bonus: bonusExp,
+      levelUp: leveledUp,
+      actionId: savedAction._id.toString(),
+    };
+  }
+
+  async getVoices(user: any, page: number = 1, limit: number = 20) {
+    if (!user.coupleRoomId) {
+      return {
+        items: [],
+        total: 0,
+      };
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [actions, total] = await Promise.all([
+      this.petActionModel
+        .find({
+          coupleId: user.coupleRoomId,
+          type: 'voice',
+          audioUrl: { $exists: true, $ne: null },
+        })
+        .sort({ actionAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select(
+          'audioUrl duration userId actionAt takenAt baseExp bonusExp text mood createdAt',
+        )
+        .lean(),
+      this.petActionModel.countDocuments({
+        coupleId: user.coupleRoomId,
+        type: 'voice',
+        audioUrl: { $exists: true, $ne: null },
+      }),
+    ]);
+
+    const items = actions.map((action) => {
+      const createdAt = (action as any).createdAt || new Date();
+      const actionAt = action.actionAt || createdAt;
+
+      return {
+        audioUrl: action.audioUrl,
+        duration: action.duration || 0,
+        userId: action.userId,
+        actionAt,
+        takenAt: action.takenAt || null,
+        baseExp: action.baseExp || 0,
+        bonusExp: action.bonusExp || 0,
+        text: action.text || null,
+        mood: action.mood || null,
+        createdAt,
+      };
+    });
+
+    return {
+      items,
+      total,
     };
   }
 }

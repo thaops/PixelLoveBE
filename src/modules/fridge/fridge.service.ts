@@ -1,7 +1,6 @@
 import {
   Injectable,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -17,7 +16,7 @@ import { User, UserDocument } from '../user/schemas/user.schema';
 export class FridgeService {
   // List of available note frame images
   private readonly NOTE_FRAMES = [
-    'https://res.cloudinary.com/dukoun1pb/image/upload/v1767624981/note_pink_dog_tilted-removebg-preview_fdj4jc.png'
+    'https://res.cloudinary.com/dukoun1pb/image/upload/v1767624981/note_pink_dog_tilted-removebg-preview_fdj4jc.png',
   ];
 
   // Default background for fridge
@@ -26,6 +25,14 @@ export class FridgeService {
       'https://res.cloudinary.com/dukoun1pb/image/upload/v1767624634/Group_1000009246_nb08lu.png',
     aspectRatio: '9:16',
   };
+
+  // Fixed positions for notes on board (all y < 0.30)
+  private readonly FIXED_BOARD_POSITIONS = [
+    { x: 0.35, y: 0.25 }, // giữa
+    { x: 0.72, y: 0.35 }, // trái
+    { x: 0.35, y: 0.4 }, // phải
+    { x: 0.72, y: 0.45 }, // dưới giữa
+  ];
 
   constructor(
     @InjectModel(FridgeNote.name)
@@ -36,32 +43,30 @@ export class FridgeService {
   ) {}
 
   /**
-   * Get fridge home data (background + 2 latest notes)
+   * Get fridge home data (background + 4 latest notes)
+   * All notes are positioned on the board (fixed positions)
    */
   async getFridgeHome(user: any) {
-    // Check if user is in a couple
     if (!user.coupleRoomId) {
       throw new BadRequestException('User is not in a couple');
     }
 
-    // Get 2 latest notes for this couple
+    // Get 4 latest notes
     const notes = await this.fridgeNoteModel
       .find({ coupleId: user.coupleRoomId })
       .sort({ createdAt: -1 })
-      .limit(2)
+      .limit(4)
       .exec();
 
-    // Format notes for response
-    const formattedNotes = notes.map((note) => ({
+    // Map notes with fixed board positions (override DB positions)
+    const formattedNotes = notes.map((note, index) => ({
       id: note._id.toString(),
       content: note.content,
       frameImageUrl: note.frameImageUrl,
-      position: {
-        x: note.positionX,
-        y: note.positionY,
-      },
-      rotation: note.rotation,
-      zIndex: notes.length - notes.indexOf(note), // First note has higher zIndex
+      // Set fixed position from board positions (all y < 0.30)
+      position: this.FIXED_BOARD_POSITIONS[index],
+      rotation: 0,
+      zIndex: notes.length - index, // Newest note has highest zIndex
       createdAt: (note.createdAt || new Date()).toISOString(),
     }));
 
@@ -73,29 +78,42 @@ export class FridgeService {
 
   /**
    * Create a new fridge note
+   * - First note → board
+   * - Others → body
+   * - rotation luôn = 0
    */
   async createNote(user: any, content: string) {
-    // Check if user is in a couple
     if (!user.coupleRoomId) {
       throw new BadRequestException('User is not in a couple');
     }
 
-    // Generate random frame image URL
+    // Count existing notes
+    const noteCount = await this.fridgeNoteModel.countDocuments({
+      coupleId: user.coupleRoomId,
+    });
+
+    // Select frame
     const frameImageUrl =
       this.NOTE_FRAMES[
         Math.floor(Math.random() * this.NOTE_FRAMES.length)
       ];
 
-    // Note mặt đinh không xoay trục
+    // ❗ KHÔNG xoay ảnh
     const rotation = 0;
 
-    // Position mapping:
-    // - Note mới nhất (zIndex cao) → Cánh dưới: y ~0.55-0.62
-    // - position.x: random quanh trung tâm, khoảng 0.4-0.6
-    const positionX = 0.4 + Math.random() * 0.2; // 0.4 to 0.6
-    const positionY = 0.55 + Math.random() * 0.07; // 0.55 to 0.62 (cánh dưới)
+    let positionX: number;
+    let positionY: number;
 
-    // Create note in database
+    if (noteCount === 0) {
+      // 🪵 First note → board
+      positionX = 0.46 + Math.random() * 0.1;
+      positionY = 0.21 + Math.random() * 0.05;
+    } else {
+      // 🧊 Other notes → body
+      positionX = 0.4 + Math.random() * 0.2; // 0.4 → 0.6
+      positionY = 0.48 + Math.random() * 0.1; // 0.52 → 0.62
+    }
+
     const note = await this.fridgeNoteModel.create({
       coupleId: user.coupleRoomId,
       content,
@@ -105,7 +123,6 @@ export class FridgeService {
       rotation,
     });
 
-    // Format note for response and realtime event
     const formattedNote = {
       id: note._id.toString(),
       content: note.content,
@@ -118,25 +135,20 @@ export class FridgeService {
       createdAt: (note.createdAt || new Date()).toISOString(),
     };
 
-    // Emit realtime event to couple room
+    // Emit realtime event
     try {
       this.eventsGateway.emitToCoupleRoom(
         user.coupleRoomId,
         'fridge:note:new',
-        {
-          note: formattedNote,
-        },
+        { note: formattedNote },
       );
     } catch (error) {
-      // Log error but don't fail the request
-      console.error('Failed to emit realtime event:', error);
+      console.error('Emit fridge:note:new failed', error);
     }
 
-    // Return minimal response
     return {
       id: note._id.toString(),
       createdAt: (note.createdAt || new Date()).toISOString(),
     };
   }
 }
-

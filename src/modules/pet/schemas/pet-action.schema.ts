@@ -16,32 +16,33 @@ export class PetAction {
   @Prop({ required: true })
   userId: string;
 
-  @Prop({ required: true, enum: ['petting', 'image'] })
-  type: 'petting' | 'image';
+  @Prop({ required: true, enum: ['petting', 'image', 'voice'] })
+  type: 'petting' | 'image' | 'voice';
 
   @Prop({ required: false })
   imageUrl?: string; // Only for type='image'
 
-  // 👇 Thời điểm dùng cho logic (EXP, cooldown, bonus) - default = createdAt
+  @Prop({ required: false })
+  audioUrl?: string; // Only for type='voice'
+
+  @Prop({ required: false })
+  duration?: number; // Duration in seconds for type='voice'
+
   @Prop({ default: () => new Date(), required: true })
   actionAt: Date;
 
-  // 👇 Thời điểm chụp ảnh (optional, chỉ để UI hiển thị timeline)
   @Prop({ required: false })
   takenAt?: Date;
 
-  // 👇 EXP đã tính (để audit và hiển thị)
   @Prop({ default: 0 })
   baseExp: number;
 
   @Prop({ default: 0 })
   bonusExp: number;
 
-  // 👇 Text mô tả (optional, cho tương lai)
   @Prop({ required: false })
   text?: string;
 
-  // 👇 Mood (optional) - dùng để FE render chip cảm xúc
   @Prop({ type: String, required: false, enum: PET_IMAGE_MOODS })
   mood?: PetImageMood | null;
 }

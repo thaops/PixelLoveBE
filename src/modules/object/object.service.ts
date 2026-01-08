@@ -39,6 +39,16 @@ export class ObjectService {
       width: 300,
       height: 300,
       zIndex: 10,
+    },
+    {
+      id: 'radio',
+      type: 'radio',
+      imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1767853620/image-removebg-preview_9_nnrmzi.png`,
+      x: 950,
+      y: 930,
+      width: 300,
+      height: 300,
+      zIndex: 10,
     }
   ];
 

@@ -93,6 +93,32 @@ export class SendImageResponseDto {
   actionId: string;
 }
 
+export class SendVoiceResponseDto {
+  @ApiProperty({
+    description: 'Total EXP added (base + bonus)',
+    example: 30,
+  })
+  expAdded: number;
+
+  @ApiProperty({
+    description: 'Bonus EXP (15 if partner sent voice within last 3 hours, 0 otherwise)',
+    example: 15,
+  })
+  bonus: number;
+
+  @ApiProperty({
+    description: 'Whether pet leveled up',
+    example: false,
+  })
+  levelUp: boolean;
+
+  @ApiProperty({
+    description: 'Action ID of the created PetAction',
+    example: '507f1f77bcf86cd799439011',
+  })
+  actionId: string;
+}
+
 export class PetImageItemDto {
   @ApiProperty({
     description: 'Image URL',
@@ -163,6 +189,86 @@ export class PetImagesResponseDto {
   @ApiProperty({
     description: 'Total number of images',
     example: 30,
+  })
+  total: number;
+}
+
+export class PetVoiceItemDto {
+  @ApiProperty({
+    description: 'Audio URL',
+    example: 'https://res.cloudinary.com/dukoun1pb/video/upload/v123/voice.m4a',
+  })
+  audioUrl: string;
+
+  @ApiProperty({
+    description: 'Duration in seconds',
+    example: 12,
+  })
+  duration: number;
+
+  @ApiProperty({
+    description: 'User ID who uploaded the voice',
+    example: 'u_23871',
+  })
+  userId: string;
+
+  @ApiProperty({
+    description: 'Action timestamp',
+    example: '2025-12-14T14:25:00.000Z',
+  })
+  actionAt: Date;
+
+  @ApiProperty({
+    description: 'Voice recorded timestamp (optional)',
+    example: '2025-12-14T14:20:00.000Z',
+    nullable: true,
+  })
+  takenAt: Date | null;
+
+  @ApiProperty({
+    description: 'Base EXP gained',
+    example: 15,
+  })
+  baseExp: number;
+
+  @ApiProperty({
+    description: 'Bonus EXP gained',
+    example: 15,
+  })
+  bonusExp: number;
+
+  @ApiProperty({
+    description: 'Optional text/caption',
+    example: 'Miss you!',
+    nullable: true,
+  })
+  text: string | null;
+
+  @ApiProperty({
+    description: 'Optional mood',
+    example: 'love',
+    nullable: true,
+    enum: PET_IMAGE_MOODS,
+  })
+  mood: PetImageMood | null;
+
+  @ApiProperty({
+    description: 'Creation timestamp',
+    example: '2025-12-14T14:25:00.000Z',
+  })
+  createdAt: Date;
+}
+
+export class PetVoicesResponseDto {
+  @ApiProperty({
+    description: 'List of voice messages',
+    type: [PetVoiceItemDto],
+  })
+  items: PetVoiceItemDto[];
+
+  @ApiProperty({
+    description: 'Total number of voice messages',
+    example: 15,
   })
   total: number;
 }

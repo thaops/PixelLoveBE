@@ -27,8 +27,20 @@ export class CloudinaryService {
     return new Promise((resolve, reject) => {
       const uploadOptions = {
         folder,
-        resource_type: 'auto' as const, // auto-detect image/video
-        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov'],
+        resource_type: 'auto' as const,
+        allowed_formats: [
+          'jpg',
+          'jpeg',
+          'png',
+          'gif',
+          'webp',
+          'mp4',
+          'mov',
+          'm4a',
+          'mp3',
+          'aac',
+          'wav',
+        ],
       };
 
       cloudinary.uploader
