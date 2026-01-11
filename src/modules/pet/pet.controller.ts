@@ -1,16 +1,18 @@
-import { Controller, Get, Post, UseGuards, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Delete, UseGuards, Body, Query, Param } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiParam,
 } from '@nestjs/swagger';
 import { PetService } from './pet.service';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { SendImageDto } from './dto/send-image.dto';
 import { SendVoiceDto } from './dto/send-voice.dto';
+import { PinVoiceDto } from './dto/pin-voice.dto';
 import {
   PetStatusResponseDto,
   PettingResponseDto,
@@ -19,6 +21,8 @@ import {
   PetImagesResponseDto,
   PetVoicesResponseDto,
   PetSceneResponseDto,
+  TogglePinVoiceResponseDto,
+  DeleteVoiceResponseDto,
 } from './dto/pet-response.dto';
 
 /**
@@ -268,5 +272,84 @@ export class PetController {
   async getPetScene(@CurrentUser() user: any) {
     return this.petService.getPetScene(user);
   }
-}
 
+  @Get('voices/pinned')
+  @ApiOperation({
+    summary: 'Get pinned voice',
+    description: 'Get the currently pinned voice message. Returns null if no voice is pinned.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pinned voice retrieved successfully (or null if none)',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async getPinnedVoice(@CurrentUser() user: any) {
+    return this.petService.getPinnedVoice(user);
+  }
+
+  @Post('voices/pin')
+  @ApiOperation({
+    summary: 'Toggle pin voice message',
+    description: 'Toggle pin state of a voice message. If voice is not pinned, it will be pinned (and unpin any previously pinned voice). If voice is already pinned, it will be unpinned.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Voice pin state toggled successfully',
+    type: TogglePinVoiceResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - User is not in a couple',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found - Voice does not exist',
+  })
+  async togglePinVoice(
+    @CurrentUser() user: any,
+    @Body() pinVoiceDto: PinVoiceDto,
+  ) {
+    return this.petService.togglePinVoice(user, pinVoiceDto.voiceId);
+  }
+
+  @Delete('voices/:voiceId')
+  @ApiOperation({
+    summary: 'Delete a voice message',
+    description: 'Delete a voice message. If the voice is pinned, it will be unpinned first. Also deletes the file from Cloudinary.',
+  })
+  @ApiParam({
+    name: 'voiceId',
+    description: 'Voice ID to delete',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Voice deleted successfully',
+    type: DeleteVoiceResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - User is not in a couple',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found - Voice does not exist',
+  })
+  async deleteVoice(
+    @CurrentUser() user: any,
+    @Param('voiceId') voiceId: string,
+  ) {
+    return this.petService.deleteVoice(user, voiceId);
+  }
+}

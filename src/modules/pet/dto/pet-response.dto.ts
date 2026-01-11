@@ -195,6 +195,12 @@ export class PetImagesResponseDto {
 
 export class PetVoiceItemDto {
   @ApiProperty({
+    description: 'Voice ID',
+    example: '507f1f77bcf86cd799439011',
+  })
+  id: string;
+
+  @ApiProperty({
     description: 'Audio URL',
     example: 'https://res.cloudinary.com/dukoun1pb/video/upload/v123/voice.m4a',
   })
@@ -257,6 +263,12 @@ export class PetVoiceItemDto {
     example: '2025-12-14T14:25:00.000Z',
   })
   createdAt: Date;
+
+  @ApiProperty({
+    description: 'Whether this voice is pinned',
+    example: true,
+  })
+  isPinned: boolean;
 }
 
 export class PetVoicesResponseDto {
@@ -396,3 +408,30 @@ export class PetSceneResponseDto {
   petStatus: PetStatusSceneDto;
 }
 
+export class TogglePinVoiceResponseDto {
+  @ApiProperty({
+    description: 'Success status',
+    example: true,
+  })
+  success: boolean;
+
+  @ApiProperty({
+    description: 'Voice ID',
+    example: '507f1f77bcf86cd799439011',
+  })
+  voiceId: string;
+
+  @ApiProperty({
+    description: 'Whether the voice is now pinned',
+    example: true,
+  })
+  isPinned: boolean;
+}
+
+export class DeleteVoiceResponseDto {
+  @ApiProperty({
+    description: 'Success status',
+    example: true,
+  })
+  success: boolean;
+}

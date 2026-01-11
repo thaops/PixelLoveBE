@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Pet, PetDocument } from './schemas/pet.schema';
@@ -6,6 +6,7 @@ import { PetAction, PetActionDocument } from './schemas/pet-action.schema';
 import { AlbumService } from '../album/album.service';
 import { CoupleService } from '../couple/couple.service';
 import { EventsGateway } from '../events/events.gateway';
+import { CloudinaryService } from '../album/cloudinary.service';
 import { PET_IMAGE_MOODS, PetImageMood } from './pet.constants';
 
 /**
@@ -31,6 +32,7 @@ export class PetService {
     private albumService: AlbumService,
     private coupleService: CoupleService,
     private eventsGateway: EventsGateway,
+    private cloudinaryService: CloudinaryService,
   ) { }
 
   /**
@@ -712,7 +714,7 @@ export class PetService {
         .skip(skip)
         .limit(limit)
         .select(
-          'audioUrl duration userId actionAt takenAt baseExp bonusExp text mood createdAt',
+          'audioUrl duration userId actionAt takenAt baseExp bonusExp text mood createdAt isPinned pinnedAt',
         )
         .lean(),
       this.petActionModel.countDocuments({
@@ -727,6 +729,7 @@ export class PetService {
       const actionAt = action.actionAt || createdAt;
 
       return {
+        id: (action as any)._id.toString(),
         audioUrl: action.audioUrl,
         duration: action.duration || 0,
         userId: action.userId,
@@ -737,12 +740,200 @@ export class PetService {
         text: action.text || null,
         mood: action.mood || null,
         createdAt,
+        isPinned: (action as any).isPinned || false,
       };
     });
 
     return {
       items,
       total,
+    };
+  }
+
+  async getPinnedVoice(user: any) {
+    if (!user.coupleRoomId) {
+      return null;
+    }
+
+    const pinnedVoice = await this.petActionModel
+      .findOne({
+        coupleId: user.coupleRoomId,
+        type: 'voice',
+        isPinned: true,
+      })
+      .lean();
+
+    if (!pinnedVoice) {
+      return null;
+    }
+
+    const createdAt = (pinnedVoice as any).createdAt || new Date();
+
+    return {
+      id: (pinnedVoice as any)._id.toString(),
+      audioUrl: pinnedVoice.audioUrl,
+      duration: pinnedVoice.duration || 0,
+      userId: pinnedVoice.userId,
+      actionAt: pinnedVoice.actionAt || createdAt,
+      takenAt: pinnedVoice.takenAt || null,
+      baseExp: pinnedVoice.baseExp || 0,
+      bonusExp: pinnedVoice.bonusExp || 0,
+      text: pinnedVoice.text || null,
+      mood: pinnedVoice.mood || null,
+      createdAt,
+      isPinned: true,
+    };
+  }
+
+  async togglePinVoice(user: any, voiceId: string) {
+    if (!user.coupleRoomId) {
+      throw new BadRequestException('No couple found');
+    }
+
+    const voice = await this.petActionModel.findOne({
+      _id: voiceId,
+      coupleId: user.coupleRoomId,
+      type: 'voice',
+    });
+
+    if (!voice) {
+      throw new NotFoundException('Voice not found');
+    }
+
+    const isCurrentlyPinned = (voice as any).isPinned || false;
+
+    const session = await this.petActionModel.db.startSession();
+    try {
+      session.startTransaction();
+
+      if (isCurrentlyPinned) {
+        await this.petActionModel.updateOne(
+          { _id: voiceId },
+          { $set: { isPinned: false, pinnedAt: null } },
+          { session },
+        );
+
+        await session.commitTransaction();
+
+        this.eventsGateway.emitToCoupleRoom(
+          user.coupleRoomId,
+          'voices:unpinned',
+          { voiceId },
+        );
+
+        return {
+          success: true,
+          voiceId,
+          isPinned: false,
+        };
+      }
+
+      await this.petActionModel.updateMany(
+        {
+          coupleId: user.coupleRoomId,
+          type: 'voice',
+          isPinned: true,
+        },
+        { $set: { isPinned: false, pinnedAt: null } },
+        { session },
+      );
+
+      const now = new Date();
+      await this.petActionModel.updateOne(
+        { _id: voiceId },
+        { $set: { isPinned: true, pinnedAt: now } },
+        { session },
+      );
+
+      await session.commitTransaction();
+
+      const updatedVoice = await this.petActionModel.findById(voiceId).lean();
+      const createdAt = (updatedVoice as any).createdAt || new Date();
+
+      this.eventsGateway.emitToCoupleRoom(
+        user.coupleRoomId,
+        'voices:pinned',
+        {
+          id: (updatedVoice as any)._id.toString(),
+          audioUrl: updatedVoice?.audioUrl,
+          duration: updatedVoice?.duration || 0,
+          userId: updatedVoice?.userId,
+          actionAt: updatedVoice?.actionAt || createdAt,
+          takenAt: updatedVoice?.takenAt || null,
+          baseExp: updatedVoice?.baseExp || 0,
+          bonusExp: updatedVoice?.bonusExp || 0,
+          text: updatedVoice?.text || null,
+          mood: updatedVoice?.mood || null,
+          createdAt,
+          isPinned: true,
+        },
+      );
+
+      return {
+        success: true,
+        voiceId,
+        isPinned: true,
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  async deleteVoice(user: any, voiceId: string) {
+    if (!user.coupleRoomId) {
+      throw new BadRequestException('No couple found');
+    }
+
+    const voice = await this.petActionModel.findOne({
+      _id: voiceId,
+      coupleId: user.coupleRoomId,
+      type: 'voice',
+    });
+
+    if (!voice) {
+      throw new NotFoundException('Voice not found');
+    }
+
+    const wasPinned = (voice as any).isPinned;
+
+    if (wasPinned) {
+      this.eventsGateway.emitToCoupleRoom(
+        user.coupleRoomId,
+        'voices:unpinned',
+        {
+          voiceId: voice._id.toString(),
+        },
+      );
+    }
+
+    await this.petActionModel.deleteOne({ _id: voiceId });
+
+    if (voice.audioUrl) {
+      try {
+        const urlParts = voice.audioUrl.split('/');
+        const uploadIndex = urlParts.findIndex((part) => part === 'upload');
+        if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
+          const pathAfterUpload = urlParts.slice(uploadIndex + 2).join('/');
+          const publicId = pathAfterUpload.replace(/\.[^/.]+$/, '');
+          await this.cloudinaryService.deleteFile(publicId);
+        }
+      } catch (error) {
+      }
+    }
+
+    this.eventsGateway.emitToCoupleRoom(
+      user.coupleRoomId,
+      'voices:deleted',
+      {
+        voiceId: voice._id.toString(),
+      },
+    );
+
+    return {
+      success: true,
     };
   }
 }

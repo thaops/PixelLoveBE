@@ -45,6 +45,12 @@ export class PetAction {
 
   @Prop({ type: String, required: false, enum: PET_IMAGE_MOODS })
   mood?: PetImageMood | null;
+
+  @Prop({ default: false })
+  isPinned: boolean;
+
+  @Prop({ type: Date, required: false })
+  pinnedAt?: Date | null;
 }
 
 export const PetActionSchema = SchemaFactory.createForClass(PetAction);
@@ -56,4 +62,5 @@ PetActionSchema.index({ coupleId: 1, userId: 1, createdAt: -1 });
 // 👇 Index cho cooldown check và bonus check (quan trọng nhất)
 PetActionSchema.index({ coupleId: 1, userId: 1, type: 1, actionAt: -1 });
 PetActionSchema.index({ coupleId: 1, type: 1, actionAt: -1 });
+PetActionSchema.index({ coupleId: 1, type: 1, isPinned: 1 });
 
