@@ -41,6 +41,12 @@ export class PetStatusResponseDto {
   nextLevelExp: number;
 
   @ApiProperty({
+    description: 'Current streak (consecutive days of interaction)',
+    example: 5,
+  })
+  streak: number;
+
+  @ApiProperty({
     description: 'Recent images (last 5)',
     type: [RecentImageDto],
   })

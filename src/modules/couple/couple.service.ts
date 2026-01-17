@@ -31,7 +31,7 @@ export class CoupleService {
     private userModel: Model<UserDocument>,
     private userService: UserService,
     private eventsGateway: EventsGateway,
-  ) {}
+  ) { }
 
   /**
    * Create a new couple room
@@ -187,19 +187,19 @@ export class CoupleService {
       coupleId: coupleRoom._id,
       userA: userA
         ? {
-            userId: userA._id,
-            nickname: userA.nickname || userA.displayName, // Ưu tiên nickname
-            displayName: userA.displayName,
-            avatarUrl: userA.avatarUrl,
-          }
+          userId: userA._id,
+          nickname: userA.nickname || userA.displayName, // Ưu tiên nickname
+          displayName: userA.displayName,
+          avatarUrl: userA.avatarUrl,
+        }
         : null,
       userB: userB
         ? {
-            userId: userB._id,
-            nickname: userB.nickname || userB.displayName, // Ưu tiên nickname
-            displayName: userB.displayName,
-            avatarUrl: userB.avatarUrl,
-          }
+          userId: userB._id,
+          nickname: userB.nickname || userB.displayName, // Ưu tiên nickname
+          displayName: userB.displayName,
+          avatarUrl: userB.avatarUrl,
+        }
         : null,
       loveStartDate: coupleRoom.startDate,
       createdDate: (coupleRoom as any).createdAt || new Date(),
@@ -395,90 +395,90 @@ export class CoupleService {
         throw new BadRequestException('You are already connected with a partner');
       }
 
-    // Create couple room with startDate
-    const coupleRoom = await this.coupleRoomModel.create({
-      code: generateCode(6),
-      startDate: new Date(), // Set startDate when couple is formed
-      partners: [userId, partner._id.toString()],
-      petLevel: 1,
-      exp: 0,
-      petType: 'cat',
-      roomState: {
-        background: 'default',
-        items: [],
-        pets: [],
-        achievements: [],
-      },
-    });
-
-    // Update both users to couple mode
-    await this.userModel.findByIdAndUpdate(userId, {
-      mode: 'couple',
-      partnerId: partner._id.toString(),
-      coupleRoomId: coupleRoom._id.toString(),
-    });
-
-    await this.userModel.findByIdAndUpdate(partner._id, {
-      mode: 'couple',
-      partnerId: userId,
-      coupleRoomId: coupleRoom._id.toString(),
-      coupleCode: null, // Clear the code after successful connection
-      coupleCodeExpiresAt: null, // Clear expiration too
-    });
-
-    // Clear attempts on success
-    this.codeAttempts.delete(attemptKey);
-
-    // Emit socket event to both users about successful pairing
-    const pairingEvent = {
-      coupleRoomId: coupleRoom._id.toString(),
-      startDate: coupleRoom.startDate,
-      partner: {
-        userId: partner._id.toString(),
-        nickname: partner.nickname || partner.displayName, // Ưu tiên nickname
-        displayName: partner.displayName,
-        avatarUrl: partner.avatarUrl,
-        gender: partner.gender,
-      },
-      currentUser: {
-        userId: currentUser._id.toString(),
-        nickname: currentUser.nickname || currentUser.displayName, // Ưu tiên nickname
-        displayName: currentUser.displayName,
-        avatarUrl: currentUser.avatarUrl,
-        gender: currentUser.gender,
-      },
-      roomState: coupleRoom.roomState,
-    };
-
-    // Emit to both users individually
-    this.eventsGateway.emitToUser(userId, 'couplePaired', pairingEvent);
-    this.eventsGateway.emitToUser(
-      partner._id.toString(),
-      'couplePaired',
-      pairingEvent,
-    );
-
-    // Also emit to couple room (if they're already connected)
-    this.eventsGateway.emitToCoupleRoom(
-      coupleRoom._id.toString(),
-      'coupleRoomUpdated',
-      {
-        coupleRoomId: coupleRoom._id.toString(),
+      // Create couple room with startDate
+      const coupleRoom = await this.coupleRoomModel.create({
+        code: generateCode(6),
+        startDate: new Date(), // Set startDate when couple is formed
         partners: [userId, partner._id.toString()],
-        startDate: coupleRoom.startDate,
-      },
-    );
+        petLevel: 1,
+        exp: 0,
+        petType: 'cat',
+        roomState: {
+          background: 'default',
+          items: [],
+          pets: [],
+          achievements: [],
+        },
+      });
 
-    return {
-      message: 'Successfully connected as couple!',
-      coupleRoomId: coupleRoom._id,
-      startDate: coupleRoom.startDate,
-      partnerId: partner._id,
-      partnerName: partner.nickname || partner.displayName, // Ưu tiên nickname
-      partnerAvatar: partner.avatarUrl,
-      partnerGender: partner.gender,
-      roomState: coupleRoom.roomState,
-    };
+      // Update both users to couple mode
+      await this.userModel.findByIdAndUpdate(userId, {
+        mode: 'couple',
+        partnerId: partner._id.toString(),
+        coupleRoomId: coupleRoom._id.toString(),
+      });
+
+      await this.userModel.findByIdAndUpdate(partner._id, {
+        mode: 'couple',
+        partnerId: userId,
+        coupleRoomId: coupleRoom._id.toString(),
+        coupleCode: null, // Clear the code after successful connection
+        coupleCodeExpiresAt: null, // Clear expiration too
+      });
+
+      // Clear attempts on success
+      this.codeAttempts.delete(attemptKey);
+
+      // Emit socket event to both users about successful pairing
+      const pairingEvent = {
+        coupleRoomId: coupleRoom._id.toString(),
+        startDate: coupleRoom.startDate,
+        partner: {
+          userId: partner._id.toString(),
+          nickname: partner.nickname || partner.displayName, // Ưu tiên nickname
+          displayName: partner.displayName,
+          avatarUrl: partner.avatarUrl,
+          gender: partner.gender,
+        },
+        currentUser: {
+          userId: currentUser._id.toString(),
+          nickname: currentUser.nickname || currentUser.displayName, // Ưu tiên nickname
+          displayName: currentUser.displayName,
+          avatarUrl: currentUser.avatarUrl,
+          gender: currentUser.gender,
+        },
+        roomState: coupleRoom.roomState,
+      };
+
+      // Emit to both users individually
+      this.eventsGateway.emitToUser(userId, 'couplePaired', pairingEvent);
+      this.eventsGateway.emitToUser(
+        partner._id.toString(),
+        'couplePaired',
+        pairingEvent,
+      );
+
+      // Also emit to couple room (if they're already connected)
+      this.eventsGateway.emitToCoupleRoom(
+        coupleRoom._id.toString(),
+        'coupleRoomUpdated',
+        {
+          coupleRoomId: coupleRoom._id.toString(),
+          partners: [userId, partner._id.toString()],
+          startDate: coupleRoom.startDate,
+        },
+      );
+
+      return {
+        message: 'Successfully connected as couple!',
+        coupleRoomId: coupleRoom._id,
+        startDate: coupleRoom.startDate,
+        partnerId: partner._id,
+        partnerName: partner.nickname || partner.displayName, // Ưu tiên nickname
+        partnerAvatar: partner.avatarUrl,
+        partnerGender: partner.gender,
+        roomState: coupleRoom.roomState,
+      };
     } catch (error) {
       // Log failed attempt (only for invalid code, not for other errors)
       if (
@@ -645,6 +645,79 @@ export class CoupleService {
       message: 'Successfully left the couple',
       success: true,
     };
+  }
+  /**
+   * Get batch info for multiple couples (optimization for leaderboard)
+   */
+  async getCouplesBatchInfo(coupleIds: string[]) {
+    // Ensure coupleIds are valid ObjectIDs if needed, but find({ _id: { $in: strings } }) usually works in Mongoose.
+    // However, room.partners might be strings or ObjectIds.
+
+    const coupleRooms = await this.coupleRoomModel
+      .find({ _id: { $in: coupleIds } })
+      .lean();
+
+    const allUserIds = coupleRooms.flatMap((room) => room.partners.map(p => p.toString()));
+    const uniqueUserIds = [...new Set(allUserIds)];
+
+    const users = await this.userModel
+      .find({ _id: { $in: uniqueUserIds } })
+      .select('_id nickname displayName avatarUrl')
+      .lean();
+
+    const userMap = new Map();
+    users.forEach((user) => {
+      userMap.set(String(user._id), user);
+    });
+
+    const result = new Map();
+
+    coupleRooms.forEach((room) => {
+      const partners = (room.partners || []).map((id) => {
+        const idStr = String(id);
+        const user = userMap.get(idStr);
+        if (user) return user;
+
+        // Fallback for missing user
+        return {
+          _id: idStr,
+          nickname: 'Unknown User',
+          displayName: 'Unknown',
+          avatarUrl: ''
+        };
+      });
+
+      const members = partners.map((p) => ({
+        userId: String(p._id),
+        name: p.nickname || p.displayName || 'User',
+        avatarUrl: p.avatarUrl || '',
+      }));
+
+      // Calculate love days (extra metric)
+      const loveStartDate = room.startDate ? new Date(room.startDate) : new Date();
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - loveStartDate.getTime());
+      const daysInLove = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      // Determine room background URL
+      // If roomState.background is 'default' or null, use default image
+      let backgroundUrl = 'https://res.cloudinary.com/dukoun1pb/image/upload/v1768313007/back_ground_pet_1_m6frgf.png';
+      if (room.roomState && room.roomState.background && room.roomState.background !== 'default') {
+        // If it's a custom background ID/URL
+        if (room.roomState.background.startsWith('http')) {
+          backgroundUrl = room.roomState.background;
+        }
+      }
+
+      result.set(String(room._id), {
+        coupleId: String(room._id),
+        members,
+        daysInLove,
+        backgroundUrl,
+      });
+    });
+
+    return result;
   }
 }
 

@@ -24,6 +24,7 @@ import {
   TogglePinVoiceResponseDto,
   DeleteVoiceResponseDto,
 } from './dto/pet-response.dto';
+import { LeaderboardStreakResponseDto } from './dto/leaderboard-streak.dto';
 
 /**
  * Pet Controller
@@ -351,5 +352,23 @@ export class PetController {
     @Param('voiceId') voiceId: string,
   ) {
     return this.petService.deleteVoice(user, voiceId);
+  }
+
+  @Get('leaderboard/streak')
+  @ApiOperation({
+    summary: 'Get streak leaderboard',
+    description: 'Get top 50 couples with highest streak and my rank',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Leaderboard retrieved successfully',
+    type: LeaderboardStreakResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async getStreakLeaderboard(@CurrentUser() user: any) {
+    return this.petService.getStreakLeaderboard(user);
   }
 }

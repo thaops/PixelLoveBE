@@ -246,6 +246,101 @@ export class PetService {
   }
 
   /**
+   * Check if two dates are same day in UTC
+   */
+  private isSameDayUTC(d1: Date, d2: Date): boolean {
+    return (
+      d1.getUTCFullYear() === d2.getUTCFullYear() &&
+      d1.getUTCMonth() === d2.getUTCMonth() &&
+      d1.getUTCDate() === d2.getUTCDate()
+    );
+  }
+
+  /**
+   * Check and update user activity
+   * If both users active today -> update streak
+   */
+  private async checkAndBumpStreak(
+    pet: PetDocument,
+    userId: string,
+    coupleId: string,
+  ) {
+    const now = new Date();
+
+    // 1. Update current user activity
+    if (!pet.partnerActivity) {
+      pet.partnerActivity = {};
+    }
+
+    // We need markModified because partnerActivity is Mixed type (Object)
+    pet.partnerActivity[userId] = now;
+    pet.markModified('partnerActivity');
+
+    // 2. Check partner activity
+    const coupleRoom = await this.coupleService.getRoomInfo(coupleId);
+    const currentUserIdStr = userId.toString();
+    const partnerId =
+      coupleRoom.userA?.userId?.toString() === currentUserIdStr
+        ? coupleRoom.userB?.userId?.toString()
+        : coupleRoom.userA?.userId?.toString();
+
+    if (!partnerId) return;
+
+    const partnerLastActive = pet.partnerActivity[partnerId];
+
+    // 3. If partner active today -> Bump streak
+    if (partnerLastActive) {
+      const partnerDate = new Date(partnerLastActive);
+      if (this.isSameDayUTC(partnerDate, now)) {
+        this.updateStreak(pet);
+      }
+    }
+
+    // Save is handled by caller or we can force save if streak logic is complex
+    // Here we let caller save if it's already doing so, but getPet usually doesn't save.
+    // So getPet needs to save.
+  }
+
+  /**
+   * Update streak logic
+   * Should be called ONLY when both users are active today
+   */
+  private updateStreak(pet: PetDocument) {
+    const now = new Date();
+    // Ensure streak is initialized
+    if (pet.streak === undefined || pet.streak === null) {
+      pet.streak = 0;
+    }
+
+    // First time
+    if (!pet.streakUpdatedAt) {
+      pet.streak = 1;
+      pet.streakUpdatedAt = now;
+      return;
+    }
+
+    const last = new Date(pet.streakUpdatedAt);
+
+    // If same day, do nothing (keep streak)
+    if (this.isSameDayUTC(last, now)) {
+      return;
+    }
+
+    // Check if yesterday (consecutive)
+    const yesterday = new Date(now);
+    yesterday.setUTCDate(now.getUTCDate() - 1);
+
+    if (this.isSameDayUTC(last, yesterday)) {
+      pet.streak += 1;
+    } else {
+      // Streak broken
+      pet.streak = 1;
+    }
+
+    pet.streakUpdatedAt = now;
+  }
+
+  /**
    * GET /pet
    * Get pet status with recent images
    */
@@ -256,12 +351,27 @@ export class PetService {
         exp: 0,
         nextLevelExp: this.EXP_PER_LEVEL,
         recentImages: [],
+        streak: 0,
       };
     }
 
     const pet = await this.getPetForCouple(user.coupleRoomId);
     const nextLevelExp =
       this.EXP_PER_LEVEL - (pet.experience % this.EXP_PER_LEVEL);
+
+    // Calculate display streak (without saving)
+    let displayStreak = pet.streak || 0;
+    if (pet.streakUpdatedAt) {
+      const now = new Date();
+      const last = new Date(pet.streakUpdatedAt);
+      const yesterday = new Date(now);
+      yesterday.setUTCDate(now.getUTCDate() - 1);
+
+      // If last update was neither today nor yesterday, streak is broken
+      if (!this.isSameDayUTC(last, now) && !this.isSameDayUTC(last, yesterday)) {
+        displayStreak = 0;
+      }
+    }
 
     // Get recent images (last 5) - sort by actionAt (fallback to createdAt for old data)
     const recentActions = await this.petActionModel
@@ -285,11 +395,23 @@ export class PetService {
       };
     });
 
+    // Check activity and potential streak update
+    await this.checkAndBumpStreak(pet, user._id.toString(), user.coupleRoomId);
+    // Since checkAndBumpStreak modifies pet but doesn't save, we save here
+    // Optimisation: only save if modified
+    if (pet.isModified('partnerActivity') || pet.isModified('streak') || pet.isModified('streakUpdatedAt')) {
+      await pet.save();
+    }
+
+    // Refresh streak value after update (if any)
+    const finalStreak = pet.streak || 0;
+
     return {
       level: pet.level,
       exp: pet.experience,
       nextLevelExp,
       recentImages,
+      streak: finalStreak,
     };
   }
 
@@ -329,6 +451,7 @@ export class PetService {
     }
 
     // Apply EXP and check level up
+    await this.checkAndBumpStreak(pet, userId, user.coupleRoomId);
     const leveledUp = this.applyExp(pet, expGained);
     await pet.save();
 
@@ -416,6 +539,7 @@ export class PetService {
     await this.albumService.addPhoto(user, imageUrl);
 
     // 👇 BƯỚC 7: Apply EXP and check level up
+    await this.checkAndBumpStreak(pet, userId, user.coupleRoomId);
     const leveledUp = this.applyExp(pet, totalExp);
     await pet.save();
 
@@ -564,7 +688,7 @@ export class PetService {
     // Pet background (1242 x 2688 for pet screen)
     const background = {
       imageUrl:
-        'https://res.cloudinary.com/dukoun1pb/image/upload/v1766225460/back_ground_pet_sxwleg.png',
+        'https://res.cloudinary.com/dukoun1pb/image/upload/v1768313007/back_ground_pet_1_m6frgf.png',
       width: 2048,
       height: 2048,
     };
@@ -574,9 +698,9 @@ export class PetService {
       {
         id: 'pet',
         type: 'pet',
-        imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1765727783/pet_level_1_zlsahy.png`,
+        imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1768313006/pet_1_cmqtel.png`,
         x: 850,
-        y: 870,
+        y: 890,
         width: 400,
         height: 400,
         zIndex: 10,
@@ -660,6 +784,7 @@ export class PetService {
     });
 
     const leveledUp = this.applyExp(pet, totalExp);
+    await this.checkAndBumpStreak(pet, userId, user.coupleRoomId);
     await pet.save();
 
     this.eventsGateway.emitToCoupleRoom(
@@ -934,6 +1059,86 @@ export class PetService {
 
     return {
       success: true,
+    };
+  }
+
+  /**
+   * Get streak leaderboard
+   * Top 50 couples with highest streak
+   */
+  async getStreakLeaderboard(user: any) {
+    // 1. Get top 50 pets (sorted by streak)
+    // Removed { streak: { $gt: 0 } } filter to allow users to see themselves even with 0 streak
+    // when the leaderboard is not full.
+    const topPets = await this.petModel
+      .find({})
+      .sort({ streak: -1, streakUpdatedAt: -1 })
+      .limit(50)
+      .lean();
+
+    if (topPets.length === 0) {
+      return {
+        myRank: 0,
+        myStreak: 0,
+        items: [],
+      };
+    }
+
+    // 2. Get couple info for these pets
+    const coupleIds = topPets.map((p) => p.coupleId);
+    const couplesInfo = await this.coupleService.getCouplesBatchInfo(coupleIds);
+
+    // 3. Map to DTO
+    const items = topPets.map((pet, index) => {
+      const info = couplesInfo.get(pet.coupleId);
+      return {
+        coupleId: pet.coupleId,
+        members: info?.members || [],
+        pet: {
+          level: pet.level || 1,
+        },
+        backgroundUrl: info?.backgroundUrl || 'https://res.cloudinary.com/dukoun1pb/image/upload/v1768313007/back_ground_pet_1_m6frgf.png',
+        streak: pet.streak || 0,
+        loveDays: info?.daysInLove || 0,
+        rank: index + 1,
+      };
+    });
+
+    // 4. Get my rank and streak (if user has couple)
+    let myRank = 0;
+    let myStreak = 0;
+
+    if (user.coupleRoomId) {
+      const myPet = await this.petModel
+        .findOne({ coupleId: user.coupleRoomId })
+        .lean();
+
+      if (myPet) {
+        myStreak = myPet.streak || 0;
+        if (myStreak > 0) {
+          // Count how many people have MORE streak than me
+          // Note: This is a simple rank approximation. 
+          // For strict rank matching the sort order, we'd need more complex query
+          const betterStreakCount = await this.petModel.countDocuments({
+            streak: { $gt: myStreak },
+          });
+          myRank = betterStreakCount + 1;
+
+          // Refine rank if I am in top list
+          const inTopListIndex = items.findIndex(
+            (item) => item.coupleId === user.coupleRoomId,
+          );
+          if (inTopListIndex !== -1) {
+            myRank = items[inTopListIndex].rank;
+          }
+        }
+      }
+    }
+
+    return {
+      myRank,
+      myStreak,
+      items,
     };
   }
 }

@@ -20,6 +20,15 @@ export class Pet {
 
   @Prop({ type: Date, default: Date.now })
   lastUpdatedAt: Date;
+
+  @Prop({ default: 0 })
+  streak: number; // consecutive days with interaction
+
+  @Prop({ type: Date })
+  streakUpdatedAt: Date; // last time streak was updated (or checked)
+
+  @Prop({ type: Object, default: {} })
+  partnerActivity: Record<string, Date>; // userId -> lastActiveAt
 }
 
 export const PetSchema = SchemaFactory.createForClass(Pet);
