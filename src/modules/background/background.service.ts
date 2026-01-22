@@ -11,7 +11,7 @@ import { Background, BackgroundDocument } from './schemas/background.schema';
 export class BackgroundService {
   // Default background constant
   private readonly DEFAULT_BACKGROUND = {
-    imageUrl: 'https://res.cloudinary.com/dukoun1pb/image/upload/v1765298026/du_an_thao-van_background_moi_dvy474.png',
+    imageUrl: 'https://res.cloudinary.com/dukoun1pb/image/upload/v1769094132/background_ch%C3%ADnh_t55903.png',
     width: 4096,
     height: 1920,
   };
@@ -19,7 +19,7 @@ export class BackgroundService {
   constructor(
     @InjectModel(Background.name)
     private backgroundModel: Model<BackgroundDocument>,
-  ) {}
+  ) { }
 
   /**
    * Get background by ID

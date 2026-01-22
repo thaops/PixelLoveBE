@@ -15,7 +15,7 @@ export class HomeService {
     private roomService: RoomService,
     private backgroundService: BackgroundService,
     private objectService: ObjectService,
-  ) {}
+  ) { }
 
   /**
    * Get home scene for current user
