@@ -685,25 +685,37 @@ export class PetService {
       }
     }
 
-    // Pet background (1242 x 2688 for pet screen)
+    // Pet background
     const background = {
       imageUrl:
-        'https://res.cloudinary.com/dukoun1pb/image/upload/v1768313007/back_ground_pet_1_m6frgf.png',
+        'https://res.cloudinary.com/dukoun1pb/image/upload/v1770517801/background_pet_ashg7f.png',
       width: 2048,
       height: 2048,
     };
 
-    // Pet object position (centered for vertical screen)
+    // Pet objects
     const objects = [
+      {
+        id: 'chari-pet',
+        type: 'chari-pet',
+        imageUrl:
+          'https://res.cloudinary.com/dukoun1pb/image/upload/v1770517794/background_pet_ca%CC%81i_%C4%91e%CC%A3%CC%82m_cu%CC%89a_pet_j4w2g5.png',
+        x: 900,
+        y: 1350,
+        width: 700,
+        height: 700,
+        zIndex: 9,
+      },
       {
         id: 'pet',
         type: 'pet',
-        imageUrl: `https://res.cloudinary.com/dukoun1pb/image/upload/v1768313006/pet_1_cmqtel.png`,
-        x: 850,
-        y: 890,
-        width: 400,
-        height: 400,
-        zIndex: 10,
+        imageUrl:
+          'https://res.cloudinary.com/dukoun1pb/image/upload/v1770517831/pet_level_1_aav3jk.png',
+        x: 780,
+        y: 925,
+        width: 900,
+        height: 900,
+        zIndex: 11,
       },
     ];
 

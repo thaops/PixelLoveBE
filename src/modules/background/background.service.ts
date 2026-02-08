@@ -11,7 +11,8 @@ import { Background, BackgroundDocument } from './schemas/background.schema';
 export class BackgroundService {
   // Default background constant
   private readonly DEFAULT_BACKGROUND = {
-    imageUrl: 'https://res.cloudinary.com/dukoun1pb/image/upload/v1769094132/background_ch%C3%ADnh_t55903.png',
+    imageUrl:
+      'https://res.cloudinary.com/dukoun1pb/image/upload/v1769238533/background_ch%C3%ADnh_1_ckajnj.png',
     width: 4096,
     height: 1920,
   };
