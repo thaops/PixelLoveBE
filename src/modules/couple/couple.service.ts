@@ -604,22 +604,9 @@ export class CoupleService {
     // Option 2: Hard delete - Remove completely (current)
     await this.coupleRoomModel.findByIdAndDelete(user.coupleRoomId);
 
-    // Reset both users to solo mode
-    await this.userModel.findByIdAndUpdate(userId, {
-      mode: 'solo',
-      partnerId: null,
-      coupleRoomId: null,
-      coupleCode: null,
-      coupleCodeExpiresAt: null,
-    });
-
-    await this.userModel.findByIdAndUpdate(partnerId, {
-      mode: 'solo',
-      partnerId: null,
-      coupleRoomId: null,
-      coupleCode: null,
-      coupleCodeExpiresAt: null,
-    });
+    // Delete both users completely
+    await this.userModel.findByIdAndDelete(userId);
+    await this.userModel.findByIdAndDelete(partnerId);
 
     // Emit break up event to both users (all their devices)
     const breakUpEvent = {
