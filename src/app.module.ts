@@ -16,6 +16,9 @@ import { EventsModule } from './modules/events/events.module';
 import { RoomModule } from './modules/room/room.module';
 import { BackgroundModule } from './modules/background/background.module';
 import { FridgeModule } from './modules/fridge/fridge.module';
+import { StreakModule } from './modules/streak/streak.module';
+import { NotificationModule } from './modules/notification/notification.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 /**
  * App Module
@@ -47,8 +50,11 @@ import { FridgeModule } from './modules/fridge/fridge.module';
     RoomModule,
     BackgroundModule,
     FridgeModule,
+    StreakModule,
+    NotificationModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

@@ -6,15 +6,19 @@ import { CloudinaryController } from './cloudinary.controller';
 import { AlbumService } from './album.service';
 import { CloudinaryService } from './cloudinary.service';
 import { Album, AlbumSchema } from './schemas/album.schema';
+import { StreakModule } from '../streak/streak.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Album.name, schema: AlbumSchema }]),
     ConfigModule,
+    StreakModule,
+    NotificationModule,
   ],
   controllers: [AlbumController, CloudinaryController],
   providers: [AlbumService, CloudinaryService],
   exports: [CloudinaryService, AlbumService],
 })
-export class AlbumModule {}
+export class AlbumModule { }
 

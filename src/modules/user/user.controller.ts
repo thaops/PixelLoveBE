@@ -21,7 +21,7 @@ import { CurrentUser } from '../../common/decorators/user.decorator';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
   /**
    * GET /users/me
@@ -110,12 +110,12 @@ export class UserController {
    * - Emit WebSocket event để thông báo partner (nếu có)
    */
   @Delete(':userId')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Delete user account',
     description: 'Xóa tài khoản user và toàn bộ thông tin liên quan. Nếu user đang ở couple mode, sẽ tự động hủy ghép đôi và reset partner về solo mode.',
   })
-  @ApiParam({ 
-    name: 'userId', 
+  @ApiParam({
+    name: 'userId',
     description: 'User ID của tài khoản cần xóa (phải là ID của chính user đang đăng nhập)',
     example: 'u_12345',
   })
@@ -125,29 +125,29 @@ export class UserController {
     schema: {
       type: 'object',
       properties: {
-        message: { 
-          type: 'string', 
+        message: {
+          type: 'string',
           example: 'Account deleted successfully',
           description: 'Thông báo xóa tài khoản thành công',
         },
-        success: { 
-          type: 'boolean', 
+        success: {
+          type: 'boolean',
           example: true,
           description: 'Trạng thái thành công',
         },
       },
     },
   })
-  @ApiResponse({ 
-    status: 401, 
+  @ApiResponse({
+    status: 401,
     description: 'Unauthorized - Chưa đăng nhập hoặc token không hợp lệ',
   })
-  @ApiResponse({ 
-    status: 403, 
+  @ApiResponse({
+    status: 403,
     description: 'Forbidden - Không thể xóa tài khoản của user khác. Chỉ có thể xóa tài khoản của chính mình.',
   })
-  @ApiResponse({ 
-    status: 404, 
+  @ApiResponse({
+    status: 404,
     description: 'Not Found - Không tìm thấy user với ID được cung cấp',
   })
   async deleteAccount(
@@ -158,6 +158,20 @@ export class UserController {
       throw new ForbiddenException('Cannot delete other user account');
     }
     return this.userService.deleteAccount(user._id);
+  }
+
+  /**
+   * POST /users/ping
+   * Update device token and active status
+   */
+  @Post('ping')
+  @ApiOperation({ summary: 'Update device token and active status' })
+  @ApiResponse({ status: 200, description: 'Ping successful' })
+  async ping(
+    @CurrentUser() user: any,
+    @Body('onesignalPlayerId') onesignalPlayerId?: string,
+  ) {
+    return this.userService.ping(user._id, onesignalPlayerId);
   }
 }
 

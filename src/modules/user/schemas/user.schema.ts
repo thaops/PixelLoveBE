@@ -59,6 +59,12 @@ export class User {
 
   @Prop({ default: 0 })
   coins: number;
+
+  @Prop({ default: null })
+  onesignalPlayerId: string;
+
+  @Prop({ default: null })
+  lastActiveAt: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

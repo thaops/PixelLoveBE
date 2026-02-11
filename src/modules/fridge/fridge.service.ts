@@ -7,6 +7,8 @@ import { Model } from 'mongoose';
 import { FridgeNote, FridgeNoteDocument } from './schemas/fridge-note.schema';
 import { EventsGateway } from '../events/events.gateway';
 import { User, UserDocument } from '../user/schemas/user.schema';
+import { StreakService } from '../streak/streak.service';
+import { NotificationService } from '../notification/notification.service';
 
 /**
  * Fridge Service
@@ -40,7 +42,9 @@ export class FridgeService {
     @InjectModel(User.name)
     private userModel: Model<UserDocument>,
     private eventsGateway: EventsGateway,
-  ) {}
+    private streakService: StreakService,
+    private notificationService: NotificationService,
+  ) { }
 
   /**
    * Get fridge home data (background + 4 latest notes)
@@ -95,7 +99,7 @@ export class FridgeService {
     // Select frame
     const frameImageUrl =
       this.NOTE_FRAMES[
-        Math.floor(Math.random() * this.NOTE_FRAMES.length)
+      Math.floor(Math.random() * this.NOTE_FRAMES.length)
       ];
 
     // ❗ KHÔNG xoay ảnh
@@ -145,6 +149,10 @@ export class FridgeService {
     } catch (error) {
       console.error('Emit fridge:note:new failed', error);
     }
+
+    // Update streak
+    await this.streakService.recordInteraction(user._id.toString(), user.coupleRoomId);
+    await this.notificationService.sendInteractionPush(user._id.toString());
 
     return {
       id: note._id.toString(),

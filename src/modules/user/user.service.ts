@@ -7,6 +7,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { OnboardDto } from './dto/onboard.dto';
 import { calculateZodiac } from '../../shared/utils/zodiac.util';
 import { EventsGateway } from '../events/events.gateway';
+import { NotificationService } from '../notification/notification.service';
 
 /**
  * User Service
@@ -20,7 +21,8 @@ export class UserService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(CoupleRoom.name) private coupleRoomModel: Model<CoupleRoomDocument>,
     private eventsGateway: EventsGateway,
-  ) {}
+    private notificationService: NotificationService,
+  ) { }
 
   /**
    * Get user profile with couple and roomState info (GET /me)
@@ -55,11 +57,11 @@ export class UserService {
     // If user is in couple mode, include couple and roomState
     if (user.mode === 'couple' && user.coupleRoomId) {
       const coupleRoom = await this.coupleRoomModel.findById(user.coupleRoomId);
-      
+
       if (coupleRoom) {
         // Get partner info
         const partner = await this.userModel.findById(user.partnerId);
-        
+
         response.couple = {
           coupleRoomId: coupleRoom._id,
           code: coupleRoom.code,
@@ -258,6 +260,26 @@ export class UserService {
       message: 'Account deleted successfully',
       success: true,
     };
+  }
+
+  /**
+   * Ping / Heartbeat from app
+   * Updates lastActiveAt and onesignalPlayerId
+   */
+  async ping(userId: string, onesignalPlayerId?: string) {
+    const update: any = { lastActiveAt: new Date() };
+    if (onesignalPlayerId) {
+      update.onesignalPlayerId = onesignalPlayerId;
+    }
+
+    const user = await this.userModel.findByIdAndUpdate(userId, { $set: update }, { new: true });
+
+    // Check and push "Partner open app"
+    if (user && user.partnerId) {
+      await this.notificationService.sendPartnerOpen(userId);
+    }
+
+    return { success: true };
   }
 }
 

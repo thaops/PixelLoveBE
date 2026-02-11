@@ -2,12 +2,16 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Album, AlbumDocument } from './schemas/album.schema';
+import { StreakService } from '../streak/streak.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class AlbumService {
   constructor(
     @InjectModel(Album.name) private albumModel: Model<AlbumDocument>,
-  ) {}
+    private streakService: StreakService,
+    private notificationService: NotificationService,
+  ) { }
 
   async addPhoto(user: any, imageUrl: string) {
     if (!imageUrl.startsWith('http')) {
@@ -19,6 +23,11 @@ export class AlbumService {
       coupleId: user.coupleRoomId || null,
       imageUrl,
     });
+
+    if (user.coupleRoomId) {
+      await this.streakService.recordInteraction(user._id.toString(), user.coupleRoomId);
+      await this.notificationService.sendInteractionPush(user._id.toString());
+    }
 
     return {
       photoId: photo._id,

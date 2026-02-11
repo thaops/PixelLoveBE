@@ -5,6 +5,8 @@ import { FridgeService } from './fridge.service';
 import { FridgeNote, FridgeNoteSchema } from './schemas/fridge-note.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
 import { EventsModule } from '../events/events.module';
+import { StreakModule } from '../streak/streak.module';
+import { NotificationModule } from '../notification/notification.module';
 
 /**
  * Fridge Module
@@ -17,10 +19,11 @@ import { EventsModule } from '../events/events.module';
       { name: User.name, schema: UserSchema },
     ]),
     EventsModule,
+    StreakModule,
+    NotificationModule,
   ],
   controllers: [FridgeController],
   providers: [FridgeService],
   exports: [FridgeService],
 })
-export class FridgeModule {}
-
+export class FridgeModule { }
