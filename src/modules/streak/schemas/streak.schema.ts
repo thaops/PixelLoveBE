@@ -17,7 +17,7 @@ export class Streak {
     @Prop({ type: Date, default: null })
     lastInteractionB: Date | null;
 
-    @Prop({ default: null })
+    @Prop({ type: String, default: null })
     lastCountedDate: string | null; // yyyy-mm-dd format
 }
 
