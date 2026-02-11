@@ -66,11 +66,11 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
-  console.log(`🚀 Pixel Love Backend is running on: http://localhost:${port}/api`);
-  console.log(`📚 Swagger documentation: http://localhost:${port}/api/docs`);
-  console.log(`🔌 WebSocket server: ws://localhost:${port}/events`);
+  console.log(`🚀 Pixel Love Backend is running on: http://0.0.0.0:${port}/api`);
+  console.log(`📚 Swagger documentation: http://0.0.0.0:${port}/api/docs`);
+  console.log(`🔌 WebSocket server: ws://0.0.0.0:${port}/events`);
 }
 
 bootstrap();
