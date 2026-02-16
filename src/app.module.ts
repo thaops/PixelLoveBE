@@ -19,6 +19,7 @@ import { FridgeModule } from './modules/fridge/fridge.module';
 import { StreakModule } from './modules/streak/streak.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { DeviceModule } from './modules/device/device.module';
+import { TarotModule } from './modules/tarot/tarot.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 /**

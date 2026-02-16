@@ -66,7 +66,7 @@ export class NotificationService {
         }
     }
 
-    private async sendToUser(userId: string, title: string, message: string, data: any) {
+    async sendToUser(userId: string, title: string, message: string, data: any) {
         const devices = await this.deviceModel.find({ userId, isActive: true }).lean();
         const playerIds = devices.map(d => d.onesignalPlayerId).filter(Boolean);
         if (playerIds.length > 0) {
