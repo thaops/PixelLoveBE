@@ -55,6 +55,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     StreakModule,
     NotificationModule,
     DeviceModule,
+    TarotModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
