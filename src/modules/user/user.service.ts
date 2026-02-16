@@ -8,6 +8,7 @@ import { OnboardDto } from './dto/onboard.dto';
 import { calculateZodiac } from '../../shared/utils/zodiac.util';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationService } from '../notification/notification.service';
+import { DeviceService } from '../device/device.service';
 
 /**
  * User Service
@@ -22,6 +23,7 @@ export class UserService {
     @InjectModel(CoupleRoom.name) private coupleRoomModel: Model<CoupleRoomDocument>,
     private eventsGateway: EventsGateway,
     private notificationService: NotificationService,
+    private deviceService: DeviceService,
   ) { }
 
   /**
@@ -253,6 +255,7 @@ export class UserService {
 
     // Xóa user
     await this.userModel.findByIdAndDelete(userId);
+    await this.deviceService.cleanupUserDevices(userId);
 
     this.logger.log(`User account ${userId} deleted successfully`);
 

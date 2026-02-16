@@ -6,6 +6,7 @@ import { User, UserSchema } from './schemas/user.schema';
 import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.schema';
 import { EventsModule } from '../events/events.module';
 import { NotificationModule } from '../notification/notification.module';
+import { DeviceModule } from '../device/device.module';
 
 /**
  * User Module
@@ -19,6 +20,7 @@ import { NotificationModule } from '../notification/notification.module';
     ]),
     EventsModule,
     NotificationModule,
+    DeviceModule,
   ],
   controllers: [UserController],
   providers: [UserService],

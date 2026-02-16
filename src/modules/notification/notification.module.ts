@@ -4,6 +4,7 @@ import { NotificationService } from './notification.service';
 import { NotificationSettings, NotificationSettingsSchema } from './schemas/notification-settings.schema';
 import { NotificationLog, NotificationLogSchema } from './schemas/notification-log.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
+import { UserDevice, UserDeviceSchema } from '../device/schemas/user-device.schema';
 
 @Module({
     imports: [
@@ -11,6 +12,7 @@ import { User, UserSchema } from '../user/schemas/user.schema';
             { name: NotificationSettings.name, schema: NotificationSettingsSchema },
             { name: NotificationLog.name, schema: NotificationLogSchema },
             { name: User.name, schema: UserSchema },
+            { name: UserDevice.name, schema: UserDeviceSchema },
         ]),
     ],
     providers: [NotificationService],

@@ -18,6 +18,7 @@ import { BackgroundModule } from './modules/background/background.module';
 import { FridgeModule } from './modules/fridge/fridge.module';
 import { StreakModule } from './modules/streak/streak.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { DeviceModule } from './modules/device/device.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 /**
@@ -52,6 +53,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     FridgeModule,
     StreakModule,
     NotificationModule,
+    DeviceModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
