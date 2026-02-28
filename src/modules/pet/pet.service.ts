@@ -597,6 +597,83 @@ export class PetService {
   }
 
   /**
+   * GET /pet/images/:imageId
+   * Get detail of a specific image
+   */
+  async getImageDetail(user: any, petActionId: string) {
+    if (!user.coupleRoomId) {
+      throw new BadRequestException('No couple found');
+    }
+
+    const action = await this.petActionModel.findOne({
+      _id: petActionId,
+      coupleId: user.coupleRoomId,
+      type: 'image',
+    }).select('imageUrl userId actionAt takenAt baseExp bonusExp text mood createdAt').lean();
+
+    if (!action) {
+      throw new NotFoundException('Image not found');
+    }
+
+    const reactions = await this.petReactionModel.find({
+      petActionId: { $in: [action._id, (action as any)._id.toString()] }
+    }).lean();
+
+    const coupleUsers = await this.userModel.find({ coupleRoomId: user.coupleRoomId }).select('_id avatarUrl nickname displayName').lean();
+    const userMap = new Map<string, { avatarUrl: string, displayName: string }>();
+    coupleUsers.forEach(u => {
+      userMap.set((u as any)._id.toString(), {
+        avatarUrl: (u as any).avatarUrl || '',
+        displayName: (u as any).nickname || (u as any).displayName || 'Người ấy'
+      });
+    });
+
+    const createdAt = (action as any).createdAt || new Date();
+    const actionAt = action.actionAt || createdAt;
+    const actionIdStr = (action as any)._id.toString();
+    const ownerInfo = userMap.get(action.userId.toString());
+
+    const total_count = reactions.reduce((sum, r) => sum + r.count, 0);
+    const groupedMap = new Map<string, number>();
+    for (const r of reactions) {
+      groupedMap.set(r.emoji, (groupedMap.get(r.emoji) || 0) + r.count);
+    }
+    const grouped = Array.from(groupedMap.entries()).map(([emoji, count]) => ({ emoji, count }));
+
+    const latest_details = reactions.map(r => {
+      const reactorInfo = userMap.get(r.userId);
+      return {
+        userId: r.userId,
+        displayName: reactorInfo?.displayName || 'Người ấy',
+        avatarUrl: reactorInfo?.avatarUrl || '',
+        emoji: r.emoji,
+        count: r.count,
+        updatedAt: (r as any).updatedAt || (r as any).createdAt || new Date(),
+      };
+    });
+
+    return {
+      id: actionIdStr,
+      imageUrl: action.imageUrl,
+      userId: action.userId,
+      displayName: ownerInfo?.displayName || 'Người ấy',
+      avatarUrl: ownerInfo?.avatarUrl || '',
+      actionAt,
+      takenAt: action.takenAt || null,
+      baseExp: action.baseExp || 0,
+      bonusExp: action.bonusExp || 0,
+      text: action.text || null,
+      mood: action.mood || null,
+      createdAt,
+      reactions: {
+        total_count,
+        grouped,
+        latest_details,
+      },
+    };
+  }
+
+  /**
    * POST /pet/images/:imageId/reactions
    * Send emoji reaction to an image
    */

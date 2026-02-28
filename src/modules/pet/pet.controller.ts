@@ -179,6 +179,39 @@ export class PetController {
   }
 
   /**
+   * GET /pet/images/:imageId
+   * Get detail of a specific image
+   */
+  @Get('images/:imageId')
+  @ApiOperation({
+    summary: 'Get detail of a specific image',
+    description: 'Get detail of a specific pet image action including reactions.',
+  })
+  @ApiParam({
+    name: 'imageId',
+    description: 'Image ID to get details for',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Image detail retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found - Image does not exist',
+  })
+  async getImageDetail(
+    @CurrentUser() user: any,
+    @Param('imageId') imageId: string,
+  ) {
+    return this.petService.getImageDetail(user, imageId);
+  }
+
+  /**
    * POST /pet/images/:imageId/reactions
    * Send emoji reaction to an image
    */
