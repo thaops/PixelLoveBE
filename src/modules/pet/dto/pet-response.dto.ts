@@ -139,6 +139,18 @@ export class PetImageItemDto {
   userId: string;
 
   @ApiProperty({
+    description: 'Name of the user (pet name/nickname)',
+    example: 'Mèo con',
+  })
+  displayName: string;
+
+  @ApiProperty({
+    description: 'Avatar URL of the user',
+    example: 'https://...',
+  })
+  avatarUrl: string;
+
+  @ApiProperty({
     description: 'Action timestamp (used for logic - cooldown, bonus)',
     example: '2025-12-14T14:25:00.000Z',
   })
@@ -186,7 +198,11 @@ export class PetImageItemDto {
 
   @ApiProperty({
     description: 'Reactions on the image',
-    example: { total_count: 12, grouped: [{ emoji: '❤️', count: 10 }] },
+    example: {
+      total_count: 12,
+      grouped: [{ emoji: '❤️', count: 10 }],
+      latest_details: [{ userId: 'u_123', displayName: 'Heo mập', avatarUrl: 'https://...', emoji: '❤️', count: 10, updatedAt: '2026-02-28T13:50:00Z' }]
+    },
   })
   reactions: any;
 }

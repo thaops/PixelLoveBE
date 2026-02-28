@@ -5,6 +5,7 @@ import { Pet, PetDocument } from './schemas/pet.schema';
 import { PetAction, PetActionDocument } from './schemas/pet-action.schema';
 import { PetReaction, PetReactionDocument } from './schemas/pet-reaction.schema';
 import { Streak, StreakDocument } from '../streak/schemas/streak.schema';
+import { User, UserDocument } from '../user/schemas/user.schema';
 import { AlbumService } from '../album/album.service';
 import { CoupleService } from '../couple/couple.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -35,6 +36,7 @@ export class PetService {
     private petActionModel: Model<PetActionDocument>,
     @InjectModel(PetReaction.name)
     private petReactionModel: Model<PetReactionDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private albumService: AlbumService,
     private coupleService: CoupleService,
     private eventsGateway: EventsGateway,
@@ -525,10 +527,21 @@ export class PetService {
     const actionIds = actions.map(a => (a as any)._id);
     const reactions = await this.petReactionModel.find({ petActionId: { $in: actionIds } }).lean();
 
+    // Fetch info for users in this couple
+    const coupleUsers = await this.userModel.find({ coupleRoomId: user.coupleRoomId }).select('_id avatarUrl nickname displayName').lean();
+    const userMap = new Map<string, { avatarUrl: string, displayName: string }>();
+    coupleUsers.forEach(u => {
+      userMap.set((u as any)._id.toString(), {
+        avatarUrl: (u as any).avatarUrl || '',
+        displayName: (u as any).nickname || (u as any).displayName || 'Người ấy'
+      });
+    });
+
     const items = actions.map((action) => {
       const createdAt = (action as any).createdAt || new Date();
       const actionAt = action.actionAt || createdAt; // Fallback to createdAt for old data
       const actionIdStr = (action as any)._id.toString();
+      const ownerInfo = userMap.get(action.userId.toString());
 
       const actionReactions = reactions.filter(r => r.petActionId.toString() === actionIdStr);
       const total_count = actionReactions.reduce((sum, r) => sum + r.count, 0);
@@ -537,13 +550,26 @@ export class PetService {
       for (const r of actionReactions) {
         groupedMap.set(r.emoji, (groupedMap.get(r.emoji) || 0) + r.count);
       }
-
       const grouped = Array.from(groupedMap.entries()).map(([emoji, count]) => ({ emoji, count }));
+
+      const latest_details = actionReactions.map(r => {
+        const reactorInfo = userMap.get(r.userId);
+        return {
+          userId: r.userId,
+          displayName: reactorInfo?.displayName || 'Người ấy',
+          avatarUrl: reactorInfo?.avatarUrl || '',
+          emoji: r.emoji,
+          count: r.count,
+          updatedAt: (r as any).updatedAt || (r as any).createdAt || new Date(),
+        };
+      });
 
       return {
         id: actionIdStr,
         imageUrl: action.imageUrl,
         userId: action.userId,
+        displayName: ownerInfo?.displayName || 'Người ấy',
+        avatarUrl: ownerInfo?.avatarUrl || '',
         actionAt, // Thời điểm logic
         takenAt: action.takenAt || null, // Thời điểm chụp (optional)
         baseExp: action.baseExp || 0, // Fallback to 0 for old data
@@ -554,6 +580,7 @@ export class PetService {
         reactions: {
           total_count,
           grouped,
+          latest_details,
         },
       };
     });
