@@ -30,12 +30,28 @@ export class NotificationTestController {
     @ApiResponse({ status: 200, description: 'Push sent' })
     async testMe(@CurrentUser() user: any, @Body() body: TestPushDto) {
         const userId = user._id.toString();
+
+        // Diagnostics
+        const deviceModel = (this.notificationService as any).deviceModel;
+        const devices = await deviceModel.find({ userId, isActive: true }).lean();
+        const playerIds = devices.map(d => d.onesignalPlayerId).filter(Boolean);
+
         await this.notificationService.sendToUser(
             userId,
             body.title || 'Test Push',
             body.message || 'Hệ thống gửi thông báo đến bạn thành công!',
             { type: 'test' }
         );
-        return { success: true, message: 'Push sent to your device via OneSignal' };
+
+        return {
+            success: true,
+            message: 'Push request sent to OneSignal',
+            diagnostics: {
+                userId,
+                activeDevicesCount: devices.length,
+                playerIds: playerIds,
+                note: playerIds.length === 0 ? 'No active OneSignal Player IDs found for this user. App needs to register device first.' : 'Request sent for the player IDs listed above.'
+            }
+        };
     }
 }
