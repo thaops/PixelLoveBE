@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Pet, PetDocument } from './schemas/pet.schema';
 import { PetAction, PetActionDocument } from './schemas/pet-action.schema';
 import { PetReaction, PetReactionDocument } from './schemas/pet-reaction.schema';
@@ -525,7 +525,12 @@ export class PetService {
     ]);
 
     const actionIds = actions.map(a => (a as any)._id);
-    const reactions = await this.petReactionModel.find({ petActionId: { $in: actionIds } }).lean();
+    const actionIdStrings = actions.map(a => (a as any)._id.toString());
+
+    // Find reactions where petActionId is either the ObjectId or the string equivalent
+    const reactions = await this.petReactionModel.find({
+      petActionId: { $in: [...actionIds, ...actionIdStrings] }
+    }).lean();
 
     // Fetch info for users in this couple
     const coupleUsers = await this.userModel.find({ coupleRoomId: user.coupleRoomId }).select('_id avatarUrl nickname displayName').lean();
@@ -541,7 +546,7 @@ export class PetService {
       const createdAt = (action as any).createdAt || new Date();
       const actionAt = action.actionAt || createdAt; // Fallback to createdAt for old data
       const actionIdStr = (action as any)._id.toString();
-      const ownerInfo = userMap.get(action.userId.toString());
+      const ownerInfo = userMap.get(actionIdStr);
 
       const actionReactions = reactions.filter(r => r.petActionId.toString() === actionIdStr);
       const total_count = actionReactions.reduce((sum, r) => sum + r.count, 0);
@@ -612,8 +617,9 @@ export class PetService {
     const userId = user._id.toString();
 
     // Upsert logic for reaction
+    const objectId = new Types.ObjectId(petActionId);
     await this.petReactionModel.findOneAndUpdate(
-      { petActionId, userId, emoji },
+      { petActionId: objectId, userId, emoji },
       { $inc: { count } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
