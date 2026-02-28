@@ -45,8 +45,9 @@ export class NotificationService {
         if (!playerIds.length || !this.ONESIGNAL_API_KEY) return { success: false, error: 'No player IDs or API key' };
 
         try {
+            console.log("KEY BEING USED:", this.ONESIGNAL_API_KEY);
             const response = await axios.post(
-                'https://onesignal.com/api/v1/notifications',
+                'https://api.onesignal.com/notifications',
                 {
                     app_id: this.ONESIGNAL_APP_ID,
                     include_player_ids: playerIds,
@@ -56,8 +57,8 @@ export class NotificationService {
                 },
                 {
                     headers: {
-                        Authorization: `Key ${this.ONESIGNAL_API_KEY}`,
-                        'Content-Type': 'application/json',
+                        "Content-Type": "application/json",
+                        "Authorization": `key ${this.ONESIGNAL_API_KEY}`
                     },
                 },
             );

@@ -1,8 +1,18 @@
+import * as crypto from 'crypto';
+
+// Polyfill for Node.js 18 to support @nestjs/schedule
+if (typeof global.crypto === 'undefined') {
+  (global as any).crypto = {
+    randomUUID: crypto.randomUUID,
+  };
+}
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+
 
 /**
  * Bootstrap function
