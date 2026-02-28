@@ -22,7 +22,7 @@ export class NotificationService {
         private configService: ConfigService,
     ) {
         this.ONESIGNAL_APP_ID = this.configService.get<string>('ONESIGNAL_APP_ID') || '60defdbb-19b7-43bb-9447-183d69b855d6';
-        this.ONESIGNAL_API_KEY = this.configService.get<string>('ONESIGNAL_API_KEY') || 'os_v2_app_mdpp3oyzw5b3xfchda6wtocv2ypenab4psnurtmngs3tu24qeqk5iovzmeyqv2gbsgqnkoew7tjcqr726eyehr3fppfhraojfsyuodi';
+        this.ONESIGNAL_API_KEY = this.configService.get<string>('ONESIGNAL_API_KEY') || 'os_v2_app_mdpp3oyzw5b3xfchda6wtocv23yiirw4uz5etmelyg6rwzcgpphp7wjop4ovps3ugeqz4famd24pg6yn5yskgmn5rc52if5d7serzra';
     }
 
     private async canSend(userId: string, type: string, minutes: number): Promise<boolean> {
