@@ -183,6 +183,12 @@ export class PetImageItemDto {
     example: '2025-12-14T14:25:00.000Z',
   })
   createdAt: Date;
+
+  @ApiProperty({
+    description: 'Reactions on the image',
+    example: { total_count: 12, grouped: [{ emoji: '❤️', count: 10 }] },
+  })
+  reactions: any;
 }
 
 export class PetImagesResponseDto {

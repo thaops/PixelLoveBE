@@ -13,6 +13,7 @@ import { CurrentUser } from '../../common/decorators/user.decorator';
 import { SendImageDto } from './dto/send-image.dto';
 import { SendVoiceDto } from './dto/send-voice.dto';
 import { PinVoiceDto } from './dto/pin-voice.dto';
+import { SendReactionDto } from './dto/pet-reaction.dto';
 import {
   PetStatusResponseDto,
   PettingResponseDto,
@@ -175,6 +176,49 @@ export class PetController {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
     return this.petService.getImages(user, pageNum, limitNum);
+  }
+
+  /**
+   * POST /pet/images/:imageId/reactions
+   * Send emoji reaction to an image
+   */
+  @Post('images/:imageId/reactions')
+  @ApiOperation({
+    summary: 'Send emoji reaction to an image',
+    description: 'Send emoji reaction to an image. Can send multiple reactions at once.',
+  })
+  @ApiParam({
+    name: 'imageId',
+    description: 'Image ID to react to',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Reaction sent successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - User is not in a couple',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found - Image does not exist',
+  })
+  async sendReaction(
+    @CurrentUser() user: any,
+    @Param('imageId') imageId: string,
+    @Body() sendReactionDto: SendReactionDto,
+  ) {
+    return this.petService.sendReaction(
+      user,
+      imageId,
+      sendReactionDto.emoji,
+      sendReactionDto.count,
+    );
   }
 
   @Post('voice')

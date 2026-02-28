@@ -4,6 +4,7 @@ import { PetController } from './pet.controller';
 import { PetService } from './pet.service';
 import { Pet, PetSchema } from './schemas/pet.schema';
 import { PetAction, PetActionSchema } from './schemas/pet-action.schema';
+import { PetReaction, PetReactionSchema } from './schemas/pet-reaction.schema';
 import { Streak, StreakSchema } from '../streak/schemas/streak.schema';
 import { CoupleModule } from '../couple/couple.module';
 import { AlbumModule } from '../album/album.module';
@@ -21,6 +22,7 @@ import { NotificationModule } from '../notification/notification.module';
       { name: Pet.name, schema: PetSchema },
       { name: PetAction.name, schema: PetActionSchema },
       { name: Streak.name, schema: StreakSchema },
+      { name: PetReaction.name, schema: PetReactionSchema },
     ]),
     forwardRef(() => CoupleModule),
     AlbumModule,

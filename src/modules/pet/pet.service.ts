@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Pet, PetDocument } from './schemas/pet.schema';
 import { PetAction, PetActionDocument } from './schemas/pet-action.schema';
+import { PetReaction, PetReactionDocument } from './schemas/pet-reaction.schema';
 import { Streak, StreakDocument } from '../streak/schemas/streak.schema';
 import { AlbumService } from '../album/album.service';
 import { CoupleService } from '../couple/couple.service';
@@ -32,6 +33,8 @@ export class PetService {
     @InjectModel(Pet.name) private petModel: Model<PetDocument>,
     @InjectModel(PetAction.name)
     private petActionModel: Model<PetActionDocument>,
+    @InjectModel(PetReaction.name)
+    private petReactionModel: Model<PetReactionDocument>,
     private albumService: AlbumService,
     private coupleService: CoupleService,
     private eventsGateway: EventsGateway,
@@ -519,11 +522,26 @@ export class PetService {
       }),
     ]);
 
+    const actionIds = actions.map(a => (a as any)._id);
+    const reactions = await this.petReactionModel.find({ petActionId: { $in: actionIds } }).lean();
+
     const items = actions.map((action) => {
       const createdAt = (action as any).createdAt || new Date();
       const actionAt = action.actionAt || createdAt; // Fallback to createdAt for old data
+      const actionIdStr = (action as any)._id.toString();
+
+      const actionReactions = reactions.filter(r => r.petActionId.toString() === actionIdStr);
+      const total_count = actionReactions.reduce((sum, r) => sum + r.count, 0);
+
+      const groupedMap = new Map<string, number>();
+      for (const r of actionReactions) {
+        groupedMap.set(r.emoji, (groupedMap.get(r.emoji) || 0) + r.count);
+      }
+
+      const grouped = Array.from(groupedMap.entries()).map(([emoji, count]) => ({ emoji, count }));
 
       return {
+        id: actionIdStr,
         imageUrl: action.imageUrl,
         userId: action.userId,
         actionAt, // Thời điểm logic
@@ -533,6 +551,10 @@ export class PetService {
         text: action.text || null,
         mood: action.mood || null,
         createdAt, // Audit timestamp
+        reactions: {
+          total_count,
+          grouped,
+        },
       };
     });
 
@@ -541,6 +563,56 @@ export class PetService {
       total,
     };
   }
+
+  /**
+   * POST /pet/images/:imageId/reactions
+   * Send emoji reaction to an image
+   */
+  async sendReaction(user: any, petActionId: string, emoji: string, count: number) {
+    if (!user.coupleRoomId) {
+      throw new BadRequestException('No couple found');
+    }
+
+    const action = await this.petActionModel.findOne({
+      _id: petActionId,
+      coupleId: user.coupleRoomId,
+    }).lean();
+
+    if (!action) {
+      throw new NotFoundException('Pet action image not found');
+    }
+
+    const userId = user._id.toString();
+
+    // Upsert logic for reaction
+    await this.petReactionModel.findOneAndUpdate(
+      { petActionId, userId, emoji },
+      { $inc: { count } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Optional OneSignal Push Notification to partner if user is not the owner of the image
+    if (action.userId.toString() !== userId && count > 0) {
+      // Get partner info to send notification
+      try {
+        const partnerId = action.userId.toString();
+        await this.notificationService.sendToUser(
+          partnerId,
+          '❤️ Người yêu của bạn vừa thả cảm xúc',
+          'Vào xem ngay pet của cả hai đang làm gì!',
+          {
+            type: 'PET_REACTION',
+            actionId: petActionId,
+          }
+        );
+      } catch (error) {
+        console.error('Error sending push notification for pet reaction:', error);
+      }
+    }
+
+    return { success: true };
+  }
+
 
   /**
    * GET /pet/scene

@@ -24,7 +24,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 
 /**
  * App Module
- * Root module that imports all feature modules
+ * Root module that imports all feature modules-
  */
 @Module({
   imports: [
