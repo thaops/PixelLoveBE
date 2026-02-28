@@ -5,6 +5,7 @@ import { NotificationSettings, NotificationSettingsSchema } from './schemas/noti
 import { NotificationLog, NotificationLogSchema } from './schemas/notification-log.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
 import { UserDevice, UserDeviceSchema } from '../device/schemas/user-device.schema';
+import { NotificationTestController } from './notification.test.controller';
 
 @Module({
     imports: [
@@ -15,6 +16,7 @@ import { UserDevice, UserDeviceSchema } from '../device/schemas/user-device.sche
             { name: UserDevice.name, schema: UserDeviceSchema },
         ]),
     ],
+    controllers: [NotificationTestController],
     providers: [NotificationService],
     exports: [NotificationService],
 })
