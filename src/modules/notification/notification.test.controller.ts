@@ -36,7 +36,7 @@ export class NotificationTestController {
         const devices = await deviceModel.find({ userId, isActive: true }).lean();
         const playerIds = devices.map(d => d.onesignalPlayerId).filter(Boolean);
 
-        await this.notificationService.sendToUser(
+        const oneSignalResponse = await this.notificationService.sendToUser(
             userId,
             body.title || 'Test Push',
             body.message || 'Hệ thống gửi thông báo đến bạn thành công!',
@@ -45,7 +45,8 @@ export class NotificationTestController {
 
         return {
             success: true,
-            message: 'Push request sent to OneSignal',
+            message: 'Push request completed',
+            oneSignalResponse,
             diagnostics: {
                 userId,
                 activeDevicesCount: devices.length,

@@ -41,11 +41,11 @@ export class NotificationService {
         return settings;
     }
 
-    private async sendPush(playerIds: string[], title: string, message: string, data: any) {
-        if (!playerIds.length || !this.ONESIGNAL_API_KEY) return;
+    private async sendPush(playerIds: string[], title: string, message: string, data: any): Promise<any> {
+        if (!playerIds.length || !this.ONESIGNAL_API_KEY) return { success: false, error: 'No player IDs or API key' };
 
         try {
-            await axios.post(
+            const response = await axios.post(
                 'https://onesignal.com/api/v1/notifications',
                 {
                     app_id: this.ONESIGNAL_APP_ID,
@@ -61,17 +61,24 @@ export class NotificationService {
                     },
                 },
             );
+            return response.data;
         } catch (error) {
             this.logger.error(`Failed to send push: ${error.message}`, error.response?.data);
+            return {
+                success: false,
+                error: error.message,
+                details: error.response?.data
+            };
         }
     }
 
-    async sendToUser(userId: string, title: string, message: string, data: any) {
+    async sendToUser(userId: string, title: string, message: string, data: any): Promise<any> {
         const devices = await this.deviceModel.find({ userId, isActive: true }).lean();
         const playerIds = devices.map(d => d.onesignalPlayerId).filter(Boolean);
         if (playerIds.length > 0) {
-            await this.sendPush(playerIds, title, message, data);
+            return await this.sendPush(playerIds, title, message, data);
         }
+        return { success: false, error: 'No active devices found' };
     }
 
     async sendInteractionPush(actorUserId: string) {
