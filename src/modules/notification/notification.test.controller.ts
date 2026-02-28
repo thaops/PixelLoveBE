@@ -4,12 +4,18 @@ import { NotificationService } from './notification.service';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 
-class TestPushDto {
-    @ApiProperty({ example: 'Hello!', description: 'Title of the push' })
-    title: string;
+import { IsString, IsOptional } from 'class-validator';
 
-    @ApiProperty({ example: 'This is a test notification.', description: 'Message body' })
-    message: string;
+class TestPushDto {
+    @ApiProperty({ example: 'Hello!', description: 'Title of the push', required: false })
+    @IsString()
+    @IsOptional()
+    title?: string;
+
+    @ApiProperty({ example: 'This is a test notification.', description: 'Message body', required: false })
+    @IsString()
+    @IsOptional()
+    message?: string;
 }
 
 @ApiTags('Notification Test')
