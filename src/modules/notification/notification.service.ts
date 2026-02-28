@@ -56,7 +56,7 @@ export class NotificationService {
                 },
                 {
                     headers: {
-                        Authorization: `Basic ${this.ONESIGNAL_API_KEY}`,
+                        Authorization: `Key ${this.ONESIGNAL_API_KEY}`,
                         'Content-Type': 'application/json',
                     },
                 },
