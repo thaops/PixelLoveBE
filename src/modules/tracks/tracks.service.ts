@@ -29,73 +29,42 @@ export class TracksService {
 
     async addTrackToRoom(roomId: string, userId: string, addTrackDto: AddTrackDto) {
         const room = await this.roomModel.findById(roomId);
-        if (!room) {
-            throw new NotFoundException('Room not found');
-        }
+        if (!room) throw new NotFoundException('Room not found');
 
-        // Validate if user belongs to the room (Assuming partners array contains user IDs as strings)
-        if (!room.partners.includes(userId)) {
-            throw new BadRequestException('User does not belong to this room');
-        }
-
-        let metadata;
-        try {
-            metadata = await youtubedl(addTrackDto.youtubeUrl, {
-                dumpJson: true,
-                noWarnings: true,
-                noCheckCertificates: true,
-                preferFreeFormats: true,
-                youtubeSkipDashManifest: true,
-                referer: 'https://www.youtube.com/'
-            });
-        } catch (error) {
-            console.error('YouTube Fetch Error Detail:', error);
-            const errorMessage = error.message || 'Unknown Error';
-            throw new BadRequestException(`YouTube Error: ${errorMessage.substring(0, 100)}`);
-        }
-
-        if (metadata.duration > 360) {
-            throw new BadRequestException('Video duration must be 360 seconds or less');
-        }
+        // Extract YouTube ID via Regex - Instant
+        const youtubeUrl = addTrackDto.youtubeUrl;
+        const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+        const match = youtubeUrl.match(regExp);
+        const youtubeVideoId = (match && match[7].length === 11) ? match[7] : 'unknown';
 
         const newTrack = new this.trackModel({
             roomId: new Types.ObjectId(roomId),
-            youtubeVideoId: metadata.id,
-            title: metadata.title,
-            thumbnail: metadata.thumbnail,
-            duration: metadata.duration,
+            youtubeVideoId: youtubeVideoId,
+            title: 'Đang lấy thông tin...', // Placeholder
+            thumbnail: `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`,
+            duration: 0,
             status: 'processing',
             addedBy: new Types.ObjectId(userId),
         });
 
         const savedTrack = await newTrack.save();
 
+        // Push job to queue
         await this.audioQueue.add('convert', {
             trackId: savedTrack._id.toString(),
-            youtubeUrl: addTrackDto.youtubeUrl,
+            youtubeUrl: youtubeUrl,
             roomId: roomId,
         });
 
+        // Notify partners immediately
         this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
             type: 'added',
             trackId: savedTrack._id.toString(),
             status: 'processing',
-            track: {
-                _id: savedTrack._id,
-                title: savedTrack.title,
-                thumbnail: savedTrack.thumbnail,
-                duration: savedTrack.duration,
-                status: 'processing'
-            }
+            track: savedTrack
         });
 
-        return {
-            trackId: savedTrack._id,
-            status: savedTrack.status,
-            title: savedTrack.title,
-            thumbnail: savedTrack.thumbnail,
-            duration: savedTrack.duration,
-        };
+        return savedTrack;
     }
 
     async removeTrackFromRoom(roomId: string, userId: string, trackId: string) {

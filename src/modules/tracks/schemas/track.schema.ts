@@ -11,7 +11,7 @@ export class Track {
     @Prop({ required: true })
     youtubeVideoId: string;
 
-    @Prop({ required: true })
+    @Prop({ required: false })
     title: string;
 
     @Prop({ required: true })

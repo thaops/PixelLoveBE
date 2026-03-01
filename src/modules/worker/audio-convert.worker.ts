@@ -47,6 +47,14 @@ export class AudioConvertWorker extends WorkerHost {
         }
     }
 
+    private emitProgress(roomId: string, trackId: string, progress: number, message: string) {
+        this.eventsGateway.emitToCoupleRoom(roomId, 'queue:progress', {
+            trackId,
+            progress,
+            message
+        });
+    }
+
     async process(job: Job<any, any, string>): Promise<any> {
         const { trackId, youtubeUrl, roomId } = job.data;
         this.logger.log(`🔄 Processing job ${job.id} for track ${trackId}`);
@@ -54,10 +62,19 @@ export class AudioConvertWorker extends WorkerHost {
         const tempMp3Path = path.join(process.cwd(), 'temp', `${trackId}.mp3`);
 
         try {
-            // 1. Download and convert audio using yt-dlp natively
-            this.logger.log(`[Job ${job.id}] Downloading audio from YouTube...`);
+            // 1. Fetch Metadata (10%)
+            this.emitProgress(roomId, trackId, 10, 'Đang quét link YouTube...');
+            const metadata = await youtubedl(youtubeUrl, {
+                dumpJson: true,
+                noWarnings: true,
+                noCheckCertificates: true,
+                preferFreeFormats: true,
+                youtubeSkipDashManifest: true,
+                referer: 'https://www.youtube.com/'
+            });
 
-            // If the file already exists, clean it up before downloading
+            // 2. Download and convert (20-70%)
+            this.emitProgress(roomId, trackId, 30, 'Đang tải nhạc và chuyển đổi...');
             if (fs.existsSync(tempMp3Path)) {
                 fs.unlinkSync(tempMp3Path);
             }
@@ -72,28 +89,33 @@ export class AudioConvertWorker extends WorkerHost {
                 ffmpegLocation: ffmpegInstaller.path,
             });
 
-            // 2. Upload to Cloudinary
-            this.logger.log(`[Job ${job.id}] Uploading to Cloudinary...`);
+            // 3. Upload to Cloudinary (80-95%)
+            this.emitProgress(roomId, trackId, 85, 'Đang đồng bộ lên đám mây...');
             const uploadResult = await cloudinary.uploader.upload(tempMp3Path, {
-                resource_type: 'video', // Audio files must be uploaded as video type in Cloudinary
+                resource_type: 'video',
                 folder: `rooms/${roomId}`,
                 public_id: `track_${trackId}`,
             });
 
             // 4. Update Database
-            this.logger.log(`[Job ${job.id}] Updating track status to ready...`);
-            await this.trackModel.findByIdAndUpdate(trackId, {
+            this.emitProgress(roomId, trackId, 95, 'Đang hoàn tất...');
+            const updatedTrack = await this.trackModel.findByIdAndUpdate(trackId, {
+                title: metadata.title,
+                thumbnail: metadata.thumbnail,
+                duration: metadata.duration,
                 status: 'ready',
                 audioUrl: uploadResult.secure_url,
-            });
+            }, { new: true });
 
-            // 5. Emit Queue Update
+            // 5. Finalize (100%)
             this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
                 type: 'ready',
                 trackId,
                 status: 'ready',
-                audioUrl: uploadResult.secure_url,
+                track: updatedTrack
             });
+
+            this.emitProgress(roomId, trackId, 100, 'Hoàn thành!');
 
             this.logger.log(`✅ Job ${job.id} completed successfully`);
             return { success: true, url: uploadResult.secure_url };

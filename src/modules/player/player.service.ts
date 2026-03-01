@@ -28,7 +28,7 @@ export class PlayerService {
 
         const queue = await this.trackModel.find({
             roomId: new Types.ObjectId(roomId),
-            status: 'ready',
+            status: { $in: ['ready', 'processing'] },
         })
             .sort({ createdAt: 1 })
             .select('title thumbnail duration audioUrl status');
@@ -53,7 +53,7 @@ export class PlayerService {
     async getQueue(roomId: string) {
         const queue = await this.trackModel.find({
             roomId: new Types.ObjectId(roomId),
-            status: 'ready',
+            status: { $in: ['ready', 'processing'] },
         })
             .sort({ createdAt: 1 })
             .select('title thumbnail duration status');
