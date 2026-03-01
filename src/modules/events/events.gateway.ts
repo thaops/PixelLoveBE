@@ -95,7 +95,10 @@ export class EventsGateway
       client.emit('connected', {
         userId: user._id,
         coupleRoomId: user.coupleRoomId,
+        rooms: Array.from(client.rooms),
       });
+
+      this.logger.log(`Socket Debug: User ${user._id} is now in rooms: ${JSON.stringify(Array.from(client.rooms))}`);
     } catch (error) {
       this.logger.error(`Connection error: ${error.message}`);
       client.disconnect();
