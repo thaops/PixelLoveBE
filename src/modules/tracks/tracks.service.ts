@@ -40,10 +40,18 @@ export class TracksService {
 
         let metadata;
         try {
-            metadata = await youtubedl(addTrackDto.youtubeUrl, { dumpJson: true, noWarnings: true });
+            metadata = await youtubedl(addTrackDto.youtubeUrl, {
+                dumpJson: true,
+                noWarnings: true,
+                noCheckCertificates: true,
+                preferFreeFormats: true,
+                youtubeSkipDashManifest: true,
+                referer: 'https://www.youtube.com/'
+            });
         } catch (error) {
-            console.error('YouTube Fetch Error:', error);
-            throw new BadRequestException('Invalid YouTube URL or cannot fetch metadata');
+            console.error('YouTube Fetch Error Detail:', error);
+            const errorMessage = error.message || 'Unknown Error';
+            throw new BadRequestException(`YouTube Error: ${errorMessage.substring(0, 100)}`);
         }
 
         if (metadata.duration > 360) {
