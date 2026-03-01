@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type CoupleRoomDocument = CoupleRoom & Document;
 
@@ -47,6 +47,18 @@ export class CoupleRoom {
 
   @Prop({ default: 'cat' })
   petType: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Track', default: null })
+  currentTrackId: Types.ObjectId;
+
+  @Prop({ type: Boolean, default: false })
+  isPlaying: boolean;
+
+  @Prop({ type: Date, default: null })
+  startedAt: Date;
+
+  @Prop({ type: Number, default: 0 })
+  currentTime: number;
 }
 
 export const CoupleRoomSchema = SchemaFactory.createForClass(CoupleRoom);

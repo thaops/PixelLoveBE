@@ -21,6 +21,10 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { DeviceModule } from './modules/device/device.module';
 import { TarotModule } from './modules/tarot/tarot.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TracksModule } from './modules/tracks/tracks.module';
+import { BullModule } from '@nestjs/bullmq';
+import { WorkerModule } from './modules/worker/worker.module';
+import { PlayerModule } from './modules/player/player.module';
 
 /**
  * App Module
@@ -41,6 +45,18 @@ import { ScheduleModule } from '@nestjs/schedule';
       useFactory: getMongoConfig,
     }),
 
+    // BullMQ Redis connection
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
+        connection: {
+          host: configService.get('REDIS_HOST', 'localhost'),
+          port: configService.get('REDIS_PORT', 6379),
+        },
+      }),
+    }),
+
     // Feature modules
     AuthModule,
     UserModule,
@@ -56,6 +72,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     NotificationModule,
     DeviceModule,
     TarotModule,
+    TracksModule,
+    WorkerModule,
+    PlayerModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
