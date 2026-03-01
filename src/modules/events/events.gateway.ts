@@ -28,8 +28,7 @@ import { User, UserDocument } from '../user/schemas/user.schema';
   },
 })
 export class EventsGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+  implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
@@ -40,7 +39,7 @@ export class EventsGateway
     private jwtService: JwtService,
     private configService: ConfigService,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-  ) {}
+  ) { }
 
   /**
    * Handle client connection
@@ -83,9 +82,13 @@ export class EventsGateway
       // If user is in a couple room, join that room too
       if (user.coupleRoomId) {
         await client.join(`couple:${user.coupleRoomId}`);
-        this.logger.log(
-          `User ${user._id} joined couple room: ${user.coupleRoomId}`,
-        );
+        this.logger.log(`User ${user._id} joined couple room: ${user.coupleRoomId}`);
+      }
+
+      // If user has a roomId (which might be the same or different), join it as well
+      if (user.roomId && user.roomId !== user.coupleRoomId) {
+        await client.join(`couple:${user.roomId}`);
+        this.logger.log(`User ${user._id} joined additional room: ${user.roomId}`);
       }
 
       // Emit connection success
