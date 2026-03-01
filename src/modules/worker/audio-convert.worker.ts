@@ -9,11 +9,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { v2 as cloudinary } from 'cloudinary';
 import { EventsGateway } from '../events/events.gateway';
-// Fix import for fluent-ffmpeg handling
-import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
-import ffmpeg from 'fluent-ffmpeg';
-import youtubedl from 'youtube-dl-exec';
+// Fix import for untyped modules to prevent TS2307 on Render
+const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
+const ffmpeg = require('fluent-ffmpeg');
+const youtubedl = require('youtube-dl-exec');
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 ffmpeg.setFfprobePath(ffprobeInstaller.path);
