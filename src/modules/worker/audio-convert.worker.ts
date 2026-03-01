@@ -89,8 +89,10 @@ export class AudioConvertWorker extends WorkerHost {
 
             // 5. Emit Queue Update
             this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
+                type: 'ready',
                 trackId,
                 status: 'ready',
+                audioUrl: uploadResult.secure_url,
             });
 
             this.logger.log(`✅ Job ${job.id} completed successfully`);

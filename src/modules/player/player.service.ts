@@ -71,17 +71,27 @@ export class PlayerService {
             throw new BadRequestException('Track is invalid, not in this room, or not ready');
         }
 
+        // Logic xử lý thời gian bắt đầu (startTime)
+        let startTime = 0;
+        if (playDto.startTime !== undefined) {
+            // Ưu tiên 1: Lấy từ body request nếu mobile gửi lên
+            startTime = playDto.startTime;
+        } else if (room.currentTrackId?.toString() === trackId) {
+            // Ưu tiên 2: Nếu là phát lại đúng bài cũ đang dở, giữ nguyên currentTime hiện tại
+            startTime = room.currentTime || 0;
+        }
+
         room.currentTrackId = new Types.ObjectId(trackId);
         room.isPlaying = true;
         room.startedAt = new Date();
-        room.currentTime = 0;
+        room.currentTime = startTime;
         await room.save();
 
         this.eventsGateway.emitToCoupleRoom(roomId, 'player:update', {
             type: 'play',
             currentTrackId: trackId,
             isPlaying: true,
-            currentTime: 0,
+            currentTime: startTime,
         });
 
         return { success: true };

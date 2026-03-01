@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Track, TrackDocument } from './schemas/track.schema';
 import { CoupleRoom, CoupleRoomDocument } from '../couple/schemas/couple-room.schema';
 import { AddTrackDto } from './dto/add-track.dto';
-import youtubedl from 'youtube-dl-exec';
+const youtubedl = require('youtube-dl-exec');
 import { v2 as cloudinary } from 'cloudinary';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
@@ -42,6 +42,7 @@ export class TracksService {
         try {
             metadata = await youtubedl(addTrackDto.youtubeUrl, { dumpJson: true, noWarnings: true });
         } catch (error) {
+            console.error('YouTube Fetch Error:', error);
             throw new BadRequestException('Invalid YouTube URL or cannot fetch metadata');
         }
 
@@ -68,8 +69,16 @@ export class TracksService {
         });
 
         this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
+            type: 'added',
             trackId: savedTrack._id.toString(),
             status: 'processing',
+            track: {
+                _id: savedTrack._id,
+                title: savedTrack.title,
+                thumbnail: savedTrack.thumbnail,
+                duration: savedTrack.duration,
+                status: 'processing'
+            }
         });
 
         return {
