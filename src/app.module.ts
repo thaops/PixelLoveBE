@@ -25,6 +25,7 @@ import { TracksModule } from './modules/tracks/tracks.module';
 import { BullModule } from '@nestjs/bullmq';
 import { WorkerModule } from './modules/worker/worker.module';
 import { PlayerModule } from './modules/player/player.module';
+import Redis from 'ioredis';
 
 /**
  * App Module
@@ -49,12 +50,23 @@ import { PlayerModule } from './modules/player/player.module';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        connection: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
-        },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+        if (redisUrl) {
+          return {
+            connection: new Redis(redisUrl, {
+              maxRetriesPerRequest: null,
+            }),
+          };
+        }
+        return {
+          connection: {
+            host: configService.get('REDIS_HOST', '127.0.0.1'),
+            port: configService.get('REDIS_PORT', 6379),
+            maxRetriesPerRequest: null,
+          },
+        };
+      },
     }),
 
     // Feature modules

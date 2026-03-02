@@ -186,4 +186,53 @@ export class PlayerService {
 
         return { success: true, trackId: nextTrack._id };
     }
+
+    async previous(roomId: string, requestUserId?: string) {
+        const room = await this.roomModel.findById(roomId);
+        if (!room) throw new NotFoundException('Room not found');
+
+        // Find the previous track based on createdAt
+        const currentTrackId = room.currentTrackId;
+        let query: any = {
+            roomId: new Types.ObjectId(roomId),
+            status: 'ready',
+        };
+
+        if (currentTrackId) {
+            const currentTrack = await this.trackModel.findById(currentTrackId);
+            if (currentTrack) {
+                query.createdAt = { $lt: (currentTrack as any).createdAt };
+            }
+        }
+
+        // Find immediate previous track (last one before current)
+        let prevTrack = await this.trackModel.findOne(query).sort({ createdAt: -1 });
+
+        // If no previous track, loop back to the *last* track in queue
+        if (!prevTrack) {
+            prevTrack = await this.trackModel.findOne({
+                roomId: new Types.ObjectId(roomId),
+                status: 'ready',
+            }).sort({ createdAt: -1 });
+        }
+
+        if (!prevTrack) {
+            throw new BadRequestException('Queue is empty');
+        }
+
+        room.currentTrackId = prevTrack._id as Types.ObjectId;
+        room.isPlaying = true;
+        room.startedAt = new Date();
+        room.currentTime = 0;
+        await room.save();
+
+        this.eventsGateway.emitToCoupleRoom(roomId, 'player:update', {
+            type: 'previous',
+            currentTrackId: prevTrack._id,
+            isPlaying: true,
+            currentTime: 0,
+        });
+
+        return { success: true, trackId: prevTrack._id };
+    }
 }

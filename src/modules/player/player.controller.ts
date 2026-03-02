@@ -59,4 +59,12 @@ export class PlayerController {
         const userId = req.user.userId || req.user._id?.toString() || req.user.id;
         return this.playerService.next(roomId, userId);
     }
+
+    @Post('previous')
+    @ApiOperation({ summary: 'Quay lại bài hát trước đó' })
+    async previous(@Req() req: any) {
+        const roomId = req.user.roomId || req.user.coupleRoomId;
+        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
+        return this.playerService.previous(roomId, userId);
+    }
 }
