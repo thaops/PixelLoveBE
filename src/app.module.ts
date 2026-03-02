@@ -25,7 +25,6 @@ import { TracksModule } from './modules/tracks/tracks.module';
 import { BullModule } from '@nestjs/bullmq';
 import { WorkerModule } from './modules/worker/worker.module';
 import { PlayerModule } from './modules/player/player.module';
-import Redis from 'ioredis';
 
 /**
  * App Module
@@ -50,19 +49,37 @@ import Redis from 'ioredis';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const redisUrl = configService.get<string>('REDIS_URL');
         if (redisUrl) {
-          return {
-            connection: new Redis(redisUrl, {
-              maxRetriesPerRequest: null,
-            }),
-          };
+          try {
+            // Ensure protocol exists for URL parser
+            const normalizedUrl = redisUrl.includes('://') ? redisUrl : `redis://${redisUrl}`;
+            const parsed = new URL(normalizedUrl);
+            const port = parseInt(parsed.port, 10);
+            return {
+              connection: {
+                host: parsed.hostname || 'red-d6ihrupaae7s73cgra80',
+                port: isNaN(port) ? 6379 : port,
+                username: parsed.username || undefined,
+                password: parsed.password || undefined,
+                maxRetriesPerRequest: null,
+                tls: normalizedUrl.startsWith('rediss://') ? {} : undefined,
+              },
+            };
+          } catch (e) {
+            console.error('Failed to parse REDIS_URL, falling back to host/port config');
+          }
         }
+
+        const host = configService.get('REDIS_HOST', '127.0.0.1');
+        const portValue = configService.get('REDIS_PORT', '6379');
+        const port = parseInt(portValue.toString(), 10);
+
         return {
           connection: {
-            host: configService.get('REDIS_HOST', '127.0.0.1'),
-            port: configService.get('REDIS_PORT', 6379),
+            host: host || '127.0.0.1',
+            port: isNaN(port) ? 6379 : port,
             maxRetriesPerRequest: null,
           },
         };
