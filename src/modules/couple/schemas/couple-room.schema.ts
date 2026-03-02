@@ -59,6 +59,9 @@ export class CoupleRoom {
 
   @Prop({ type: Number, default: 0 })
   currentTime: number;
+
+  @Prop({ type: Date, default: null })
+  timerEndsAt: Date | null;
 }
 
 export const CoupleRoomSchema = SchemaFactory.createForClass(CoupleRoom);

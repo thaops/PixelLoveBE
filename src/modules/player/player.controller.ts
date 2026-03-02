@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { PlayTrackDto } from './dto/play-track.dto';
 import { SeekDto } from './dto/seek.dto';
+import { TimerDto } from './dto/timer.dto';
 
 @ApiTags('Player (Room Sync Audio)')
 @ApiBearerAuth('JWT-auth')
@@ -66,5 +67,13 @@ export class PlayerController {
         const roomId = req.user.roomId || req.user.coupleRoomId;
         const userId = req.user.userId || req.user._id?.toString() || req.user.id;
         return this.playerService.previous(roomId, userId);
+    }
+
+    @Post('timer')
+    @ApiOperation({ summary: 'Hẹn giờ tắt nhạc cho cả 2 người' })
+    @ApiBody({ type: TimerDto })
+    async setTimer(@Req() req: any, @Body() timerDto: TimerDto) {
+        const roomId = req.user.roomId || req.user.coupleRoomId;
+        return this.playerService.setTimer(roomId, timerDto);
     }
 }

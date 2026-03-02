@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CoupleRoom, CoupleRoomDocument } from '../couple/schemas/couple-room.schema';
@@ -6,9 +6,13 @@ import { Track, TrackDocument } from '../tracks/schemas/track.schema';
 import { EventsGateway } from '../events/events.gateway';
 import { PlayTrackDto } from './dto/play-track.dto';
 import { SeekDto } from './dto/seek.dto';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { TimerDto } from './dto/timer.dto';
 
 @Injectable()
 export class PlayerService {
+    private readonly logger = new Logger(PlayerService.name);
+
     constructor(
         @InjectModel(CoupleRoom.name) private roomModel: Model<CoupleRoomDocument>,
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
@@ -47,6 +51,7 @@ export class PlayerService {
             isPlaying: room.isPlaying,
             currentTime,
             queue,
+            timerEndsAt: room.timerEndsAt,
         };
     }
 
@@ -234,5 +239,58 @@ export class PlayerService {
         });
 
         return { success: true, trackId: prevTrack._id };
+    }
+
+    async setTimer(roomId: string, timerDto: TimerDto) {
+        const room = await this.roomModel.findById(roomId);
+        if (!room) throw new NotFoundException('Room not found');
+
+        let timerEndsAt: Date | null = null;
+        if (timerDto.minutes > 0) {
+            timerEndsAt = new Date(Date.now() + timerDto.minutes * 60000);
+        }
+
+        room.timerEndsAt = timerEndsAt;
+        await room.save();
+
+        this.eventsGateway.emitToCoupleRoom(roomId, 'player:timer-update', {
+            timerEndsAt: timerEndsAt,
+        });
+
+        return { success: true, timerEndsAt };
+    }
+
+    @Cron(CronExpression.EVERY_MINUTE)
+    async handleSleepTimer() {
+        const now = new Date();
+        const roomsToStop = await this.roomModel.find({
+            isPlaying: true,
+            timerEndsAt: { $ne: null, $lte: now }
+        });
+
+        for (const room of roomsToStop) {
+            this.logger.log(`😴 Sleep timer reached for room ${room._id}, pausing...`);
+
+            let currentTime = room.currentTime || 0;
+            if (room.startedAt) {
+                currentTime = currentTime + (Date.now() - new Date(room.startedAt).getTime()) / 1000;
+            }
+
+            room.isPlaying = false;
+            room.currentTime = currentTime;
+            room.timerEndsAt = null; // Clear timer
+            await room.save();
+
+            this.eventsGateway.emitToCoupleRoom(room._id.toString(), 'player:update', {
+                type: 'pause',
+                currentTrackId: room.currentTrackId,
+                isPlaying: false,
+                currentTime: room.currentTime,
+            });
+
+            this.eventsGateway.emitToCoupleRoom(room._id.toString(), 'player:timer-update', {
+                timerEndsAt: null,
+            });
+        }
     }
 }
