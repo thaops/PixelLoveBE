@@ -4,7 +4,6 @@ import { Model, Types } from 'mongoose';
 import { Track, TrackDocument } from './schemas/track.schema';
 import { CoupleRoom, CoupleRoomDocument } from '../couple/schemas/couple-room.schema';
 import { AddTrackDto } from './dto/add-track.dto';
-const youtubedl = require('youtube-dl-exec');
 import { v2 as cloudinary } from 'cloudinary';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';

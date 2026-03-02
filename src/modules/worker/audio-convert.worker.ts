@@ -64,14 +64,19 @@ export class AudioConvertWorker extends WorkerHost {
         try {
             // 1. Fetch Metadata (10%)
             this.emitProgress(roomId, trackId, 10, 'Đang quét link YouTube...');
-            const metadata = await youtubedl(youtubeUrl, {
+            const cookiesPath = path.join(process.cwd(), 'cookies.txt');
+            const ytOptions: any = {
                 dumpJson: true,
                 noWarnings: true,
                 noCheckCertificates: true,
                 preferFreeFormats: true,
-                youtubeSkipDashManifest: true,
                 referer: 'https://www.youtube.com/'
-            });
+            };
+            if (fs.existsSync(cookiesPath)) {
+                ytOptions.cookies = cookiesPath;
+            }
+
+            const metadata = await youtubedl(youtubeUrl, ytOptions);
 
             // 2. Download and convert (20-70%)
             this.emitProgress(roomId, trackId, 30, 'Đang tải nhạc và chuyển đổi...');
@@ -79,7 +84,7 @@ export class AudioConvertWorker extends WorkerHost {
                 fs.unlinkSync(tempMp3Path);
             }
 
-            await youtubedl(youtubeUrl, {
+            const downloadOptions: any = {
                 extractAudio: true,
                 audioFormat: 'mp3',
                 audioQuality: 0,
@@ -87,7 +92,12 @@ export class AudioConvertWorker extends WorkerHost {
                 noWarnings: true,
                 noPlaylist: true,
                 ffmpegLocation: ffmpegInstaller.path,
-            });
+            };
+            if (fs.existsSync(cookiesPath)) {
+                downloadOptions.cookies = cookiesPath;
+            }
+
+            await youtubedl(youtubeUrl, downloadOptions);
 
             // 3. Upload to Cloudinary (80-95%)
             this.emitProgress(roomId, trackId, 85, 'Đang đồng bộ lên đám mây...');
