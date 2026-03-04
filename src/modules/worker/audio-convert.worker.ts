@@ -68,7 +68,7 @@ export class AudioConvertWorker extends WorkerHost {
             const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
             const ytOptions: any = {
-                dumpJson: true,
+                dumpSingleJson: true,
                 noWarnings: true,
                 noCheckCertificates: true,
                 preferFreeFormats: true,
@@ -79,9 +79,11 @@ export class AudioConvertWorker extends WorkerHost {
                     'Accept-Language: en-US,en;q=0.9',
                 ],
                 forceIpv4: true,
-                extractorArgs: 'youtube:player_client=android,web',
+                extractorArgs: ['youtube:player_client=android'],
                 noCacheDir: true,
-                geoBypass: true
+                geoBypass: true,
+                sleepInterval: 2,
+                maxSleepInterval: 5,
             };
             if (fs.existsSync(cookiesPath)) {
                 ytOptions.cookies = cookiesPath;
@@ -107,9 +109,11 @@ export class AudioConvertWorker extends WorkerHost {
                 userAgent: chromeUserAgent,
                 addHeader: ytOptions.addHeader,
                 forceIpv4: true,
-                extractorArgs: 'youtube:player_client=android,web',
+                extractorArgs: ['youtube:player_client=android'],
                 noCacheDir: true,
-                geoBypass: true
+                geoBypass: true,
+                sleepInterval: 2,
+                maxSleepInterval: 5,
             };
             if (fs.existsSync(cookiesPath)) {
                 downloadOptions.cookies = cookiesPath;
