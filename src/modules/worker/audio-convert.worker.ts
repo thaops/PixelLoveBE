@@ -12,6 +12,7 @@ import { EventsGateway } from '../events/events.gateway';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
 const youtubedl = require('youtube-dl-exec');
 
 @Processor('audio-convert')
@@ -58,7 +59,7 @@ export class AudioConvertWorker extends WorkerHost {
 
     async process(job: Job<any, any, string>): Promise<any> {
         const { trackId, youtubeUrl, roomId } = job.data;
-        this.logger.log(`🔄 Processing job ${job.id} for track ${trackId} (InnerTube + Cookies)`);
+        this.logger.log(`🔄 Processing job ${job.id} for track ${trackId} (Piped API Mode)`);
 
         try {
             // 1. Extract Video ID
@@ -68,81 +69,111 @@ export class AudioConvertWorker extends WorkerHost {
 
             if (!videoId) throw new Error('Invalid YouTube ID');
 
-            this.emitProgress(roomId, trackId, 30, 'Đang chuẩn bị link stream...');
+            this.emitProgress(roomId, trackId, 30, 'Đang giải mã luồng âm thanh...');
 
-            const cookiesPath = path.join(process.cwd(), 'cookies.txt');
-            const API_KEY = 'AIzaSyAO_FJ2Sl_rCrC_rCrC_rCrC_rCrC_rCrC';
             let streamUrl = '';
             let title = '';
             let duration = 0;
             let thumbnail = '';
+            let success = false;
 
+            const axiosConfig = {
+                timeout: 8000,
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            };
+
+            // --- LỚP 1: COBALT API ---
             try {
-                // TRY LAYER 1: InnerTube TV Client (Extremely stable, no PO_TOKEN needed)
-                const response = await axios.post(`https://www.youtube.com/youtubei/v1/player?key=${API_KEY}`, {
-                    videoId: videoId,
-                    context: {
-                        client: {
-                            clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-                            clientVersion: '2.20230808.01.00',
-                            hl: 'vi',
-                            gl: 'VN'
-                        }
-                    }
-                }, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                        'Origin': 'https://www.youtube.com',
-                        'Referer': 'https://www.youtube.com/'
-                    }
-                });
+                this.logger.log(`🔗 Trying Cobalt API...`);
+                const cobaltResponse = await axios.post('https://api.cobalt.tools/api/json', {
+                    url: youtubeUrl,
+                    isAudioOnly: true,
+                    aFormat: 'mp3'
+                }, axiosConfig);
 
-                const data = response.data;
-                const playability = data.playabilityStatus;
-
-                if (playability?.status === 'OK' && data.streamingData?.adaptiveFormats) {
-                    const audioFormat = data.streamingData.adaptiveFormats
-                        .filter((f: any) => f.mimeType?.includes('audio') && f.url)
-                        .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-
-                    if (audioFormat?.url) {
-                        streamUrl = audioFormat.url;
-                        title = data.videoDetails?.title;
-                        duration = parseInt(data.videoDetails?.lengthSeconds);
-                        thumbnail = data.videoDetails?.thumbnail?.thumbnails?.[0]?.url;
-                        this.logger.log(`🎯 Stream link fetched via InnerTube TV`);
-                    }
+                if (cobaltResponse.data?.url) {
+                    streamUrl = cobaltResponse.data.url;
+                    success = true;
+                    this.logger.log('🎯 Success via Cobalt API');
                 }
             } catch (e) {
-                this.logger.warn(`⚠️ InnerTube TV failed, falling back to yt-dlp: ${e.message}`);
+                this.logger.warn(`⚠️ Cobalt API failed: ${e.message}`);
             }
 
-            // LAYER 2: Optimized yt-dlp Fallback (Final reliability layer)
-            if (!streamUrl) {
-                this.emitProgress(roomId, trackId, 60, 'Đang vượt rào cản bypass...');
-                const ytOptions: any = {
-                    dumpSingleJson: true,
-                    noWarnings: true,
-                    forceIpv4: true,
-                    format: 'bestaudio/best',
-                    extractorArgs: ['youtube:player_client=android,web'],
-                };
-                if (fs.existsSync(cookiesPath)) ytOptions.cookies = cookiesPath;
+            // --- LỚP 2: CLOUD GATEWAYS (Piped/Invidious) ---
+            if (!success) {
+                const gateways = [
+                    { url: 'https://pipedapi.kavin.rocks', type: 'piped' },
+                    { url: 'https://pa.il.ax', type: 'piped' },
+                    { url: 'https://pipedapi.rivo.lol', type: 'piped' },
+                    { url: 'https://inv.tux.pizza', type: 'invidious' },
+                    { url: 'https://invidious.projectsegfau.lt', type: 'invidious' }
+                ];
 
-                const metadata = await youtubedl(youtubeUrl, ytOptions);
-                streamUrl = metadata.url;
-                title = metadata.title;
-                duration = metadata.duration;
-                thumbnail = metadata.thumbnail;
-                this.logger.log(`✅ Stream link fetched via yt-dlp fallback`);
+                for (const gateway of gateways) {
+                    try {
+                        this.logger.log(`🔗 Trying ${gateway.type}: ${gateway.url}`);
+                        if (gateway.type === 'piped') {
+                            const res = await axios.get(`${gateway.url}/streams/${videoId}`, axiosConfig);
+                            if (res.data?.audioStreams?.length > 0) {
+                                streamUrl = res.data.audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0].url;
+                                title = res.data.title;
+                                duration = res.data.duration;
+                                thumbnail = res.data.thumbnailUrl;
+                                success = true;
+                            }
+                        } else {
+                            const res = await axios.get(`${gateway.url}/api/v1/videos/${videoId}`, axiosConfig);
+                            if (res.data?.adaptiveFormats?.length > 0) {
+                                streamUrl = res.data.adaptiveFormats.filter((f: any) => f.type?.includes('audio'))[0].url;
+                                title = res.data.title;
+                                duration = res.data.lengthSeconds;
+                                success = true;
+                            }
+                        }
+                        if (success) break;
+                    } catch (e) {
+                        this.logger.warn(`⚠️ Gateway ${gateway.url} failed: ${e.message}`);
+                    }
+                }
             }
 
-            if (!streamUrl) throw new Error('Could not extract stream URL');
+            // --- LỚP 3: YT-DLP FALLBACK ---
+            if (!success) {
+                try {
+                    this.logger.log('🔗 Falling back to yt-dlp...');
+                    const cookiesPath = path.join(process.cwd(), 'cookies.txt');
+                    const ytOptions: any = {
+                        dumpSingleJson: true,
+                        noWarnings: true,
+                        forceIpv4: true,
+                        format: 'bestaudio/best',
+                    };
+                    if (fs.existsSync(cookiesPath)) ytOptions.cookies = cookiesPath;
+
+                    const metadata = await youtubedl(youtubeUrl, ytOptions);
+                    streamUrl = metadata.url;
+                    title = metadata.title;
+                    duration = metadata.duration;
+                    thumbnail = metadata.thumbnail;
+                    success = true;
+                    this.logger.log('🎯 Success via yt-dlp fallback');
+                } catch (e) {
+                    this.logger.error(`❌ All layers failed: ${e.message}`);
+                }
+            }
+
+            if (!success || !streamUrl) {
+                throw new Error('All Cloud Gateways (Piped/Invidious) failed. Please try again later.');
+            }
 
             // 4. Update Database
-            this.emitProgress(roomId, trackId, 90, 'Đang hoàn tất...');
-            const expiredAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+            this.emitProgress(roomId, trackId, 80, 'Đang hoàn tất lưu trữ...');
+            const expiredAt = new Date(Date.now() + 5 * 60 * 60 * 1000); // 5 hours
 
             const updatedTrack = await this.trackModel.findByIdAndUpdate(trackId, {
                 title: title,
@@ -163,7 +194,7 @@ export class AudioConvertWorker extends WorkerHost {
             });
 
             this.emitProgress(roomId, trackId, 100, 'Hoàn thành!');
-            this.logger.log(`✅ Job ${job.id} completed successfully (Hybrid Mode)`);
+            this.logger.log(`✅ Job ${job.id} completed successfully (Cloud Gateway Mode)`);
 
             return { success: true, url: streamUrl };
 
