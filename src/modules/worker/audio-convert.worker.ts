@@ -91,8 +91,8 @@ export class AudioConvertWorker extends WorkerHost {
                 this.logger.log(`🔗 Trying Cobalt API...`);
                 const cobaltResponse = await axios.post('https://api.cobalt.tools/api/json', {
                     url: youtubeUrl,
-                    isAudioOnly: true,
-                    aFormat: 'mp3'
+                    downloadMode: 'audio',
+                    audioFormat: 'mp3'
                 }, axiosConfig);
 
                 if (cobaltResponse.data?.url) {
@@ -110,8 +110,10 @@ export class AudioConvertWorker extends WorkerHost {
                     { url: 'https://pipedapi.kavin.rocks', type: 'piped' },
                     { url: 'https://pa.il.ax', type: 'piped' },
                     { url: 'https://pipedapi.rivo.lol', type: 'piped' },
+                    { url: 'https://piped-api.lunar.icu', type: 'piped' },
                     { url: 'https://inv.tux.pizza', type: 'invidious' },
-                    { url: 'https://invidious.projectsegfau.lt', type: 'invidious' }
+                    { url: 'https://invidious.projectsegfau.lt', type: 'invidious' },
+                    { url: 'https://invidious.no-logs.com', type: 'invidious' }
                 ];
 
                 for (const gateway of gateways) {
@@ -142,16 +144,18 @@ export class AudioConvertWorker extends WorkerHost {
                 }
             }
 
-            // --- LỚP 3: YT-DLP FALLBACK ---
+            // --- LỚP 3: YT-DLP FALLBACK (Bypass Mode) ---
             if (!success) {
                 try {
-                    this.logger.log('🔗 Falling back to yt-dlp...');
+                    this.logger.log('🔗 Falling back to yt-dlp (Bypass Mode)...');
                     const cookiesPath = path.join(process.cwd(), 'cookies.txt');
                     const ytOptions: any = {
                         dumpSingleJson: true,
                         noWarnings: true,
                         forceIpv4: true,
                         format: 'bestaudio/best',
+                        extractorArgs: 'youtube:player_client=android,web',
+                        addHeader: ['Accept-Language: en-US,en;q=0.9']
                     };
                     if (fs.existsSync(cookiesPath)) ytOptions.cookies = cookiesPath;
 
@@ -161,7 +165,7 @@ export class AudioConvertWorker extends WorkerHost {
                     duration = metadata.duration;
                     thumbnail = metadata.thumbnail;
                     success = true;
-                    this.logger.log('🎯 Success via yt-dlp fallback');
+                    this.logger.log('🎯 Success via yt-dlp bypass fallback');
                 } catch (e) {
                     this.logger.error(`❌ All layers failed: ${e.message}`);
                 }
