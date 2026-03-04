@@ -30,6 +30,12 @@ export class Track {
     })
     status: string;
 
+    @Prop({ default: false })
+    isStreamUrl: boolean;
+
+    @Prop({ type: Date, default: null })
+    expiredAt: Date;
+
     @Prop({ type: Types.ObjectId, required: true, ref: 'User' })
     addedBy: Types.ObjectId;
 }

@@ -62,8 +62,8 @@ export class AudioConvertWorker extends WorkerHost {
         const tempMp3Path = path.join(process.cwd(), 'temp', `${trackId}.mp3`);
 
         try {
-            // 1. Fetch Metadata (10%)
-            this.emitProgress(roomId, trackId, 10, 'Đang quét link YouTube...');
+            // 1. Fetch Metadata and Stream URL (10-90%)
+            this.emitProgress(roomId, trackId, 10, 'Đang lấy link phát nhạc...');
             const cookiesPath = path.join(process.cwd(), 'cookies.txt');
             const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
@@ -82,8 +82,6 @@ export class AudioConvertWorker extends WorkerHost {
                 extractorArgs: ['youtube:player_client=android'],
                 noCacheDir: true,
                 geoBypass: true,
-                sleepInterval: 2,
-                maxSleepInterval: 5,
             };
             if (fs.existsSync(cookiesPath)) {
                 ytOptions.cookies = cookiesPath;
@@ -92,54 +90,40 @@ export class AudioConvertWorker extends WorkerHost {
 
             const metadata = await youtubedl(youtubeUrl, ytOptions);
 
-            // 2. Download and convert (20-70%)
-            this.emitProgress(roomId, trackId, 30, 'Đang tải nhạc và chuyển đổi...');
-            if (fs.existsSync(tempMp3Path)) {
-                fs.unlinkSync(tempMp3Path);
+            // Find best audio-only format
+            let streamUrl = metadata.url;
+            if (metadata.formats && metadata.formats.length > 0) {
+                // Filter for audio only formats and sort by quality (abr)
+                const audioFormats = metadata.formats.filter((f: any) =>
+                    f.vcodec === 'none' && (f.acodec !== 'none' || f.audio_ext !== 'none') && f.url
+                ).sort((a: any, b: any) => (b.abr || 0) - (a.abr || 0));
+
+                if (audioFormats.length > 0) {
+                    streamUrl = audioFormats[0].url;
+                }
             }
 
-            const downloadOptions: any = {
-                extractAudio: true,
-                audioFormat: 'mp3',
-                audioQuality: 0,
-                output: tempMp3Path,
-                noWarnings: true,
-                noPlaylist: true,
-                ffmpegLocation: ffmpegInstaller.path,
-                userAgent: chromeUserAgent,
-                addHeader: ytOptions.addHeader,
-                forceIpv4: true,
-                extractorArgs: ['youtube:player_client=android'],
-                noCacheDir: true,
-                geoBypass: true,
-                sleepInterval: 2,
-                maxSleepInterval: 5,
-            };
-            if (fs.existsSync(cookiesPath)) {
-                downloadOptions.cookies = cookiesPath;
+            if (!streamUrl) {
+                throw new Error('Could not extract stream URL');
             }
 
-            await youtubedl(youtubeUrl, downloadOptions);
-
-            // 3. Upload to Cloudinary (80-95%)
-            this.emitProgress(roomId, trackId, 85, 'Đang đồng bộ lên đám mây...');
-            const uploadResult = await cloudinary.uploader.upload(tempMp3Path, {
-                resource_type: 'video',
-                folder: `rooms/${roomId}`,
-                public_id: `track_${trackId}`,
-            });
-
-            // 4. Update Database
+            // 2. Update Database
             this.emitProgress(roomId, trackId, 95, 'Đang hoàn tất...');
+
+            // Set expiration to 6 hours from now (YouTube standard)
+            const expiredAt = new Date(Date.now() + 6 * 60 * 60 * 1000);
+
             const updatedTrack = await this.trackModel.findByIdAndUpdate(trackId, {
                 title: metadata.title,
                 thumbnail: metadata.thumbnail,
                 duration: metadata.duration,
                 status: 'ready',
-                audioUrl: uploadResult.secure_url,
+                audioUrl: streamUrl,
+                isStreamUrl: true,
+                expiredAt: expiredAt,
             }, { new: true });
 
-            // 5. Finalize (100%)
+            // 3. Finalize (100%)
             this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
                 type: 'ready',
                 trackId,
@@ -149,21 +133,15 @@ export class AudioConvertWorker extends WorkerHost {
 
             this.emitProgress(roomId, trackId, 100, 'Hoàn thành!');
 
-            this.logger.log(`✅ Job ${job.id} completed successfully`);
-            return { success: true, url: uploadResult.secure_url };
+            this.logger.log(`✅ Job ${job.id} completed successfully (Stream URL extracted)`);
+            return { success: true, url: streamUrl };
 
         } catch (error) {
             this.logger.error(`❌ Job ${job.id} failed:`, error);
-
-            // Mark as failed in DB
-            await this.trackModel.findByIdAndUpdate(trackId, {
-                status: 'failed',
-            });
+            await this.trackModel.findByIdAndUpdate(trackId, { status: 'failed' });
             throw error;
-
         } finally {
-            // 4. Cleanup temp files
-            this.logger.log(`[Job ${job.id}] Cleaning up temp files...`);
+            // Clean up Mp3 path if it exists (though we don't use it anymore)
             if (fs.existsSync(tempMp3Path)) {
                 fs.unlinkSync(tempMp3Path);
             }

@@ -5,6 +5,7 @@ import { PlayerService } from './player.service';
 import { Track, TrackSchema } from '../tracks/schemas/track.schema';
 import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.schema';
 import { EventsModule } from '../events/events.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
     imports: [
@@ -13,6 +14,9 @@ import { EventsModule } from '../events/events.module';
             { name: CoupleRoom.name, schema: CoupleRoomSchema },
         ]),
         EventsModule,
+        BullModule.registerQueue({
+            name: 'audio-convert',
+        }),
     ],
     controllers: [PlayerController],
     providers: [PlayerService],

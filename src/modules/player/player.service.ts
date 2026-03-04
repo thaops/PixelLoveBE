@@ -9,6 +9,9 @@ import { SeekDto } from './dto/seek.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TimerDto } from './dto/timer.dto';
 
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+
 @Injectable()
 export class PlayerService {
     private readonly logger = new Logger(PlayerService.name);
@@ -17,6 +20,7 @@ export class PlayerService {
         @InjectModel(CoupleRoom.name) private roomModel: Model<CoupleRoomDocument>,
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
         private readonly eventsGateway: EventsGateway,
+        @InjectQueue('audio-convert') private audioQueue: Queue,
     ) { }
 
     async getPlayerState(roomId: string) {
@@ -38,7 +42,20 @@ export class PlayerService {
             .select('title thumbnail duration audioUrl status');
 
         // Cast populated field back
-        const currentTrack = room.currentTrackId as any;
+        let currentTrack = room.currentTrackId as any;
+
+        // Auto-refresh expired stream URLs
+        if (currentTrack && currentTrack.isStreamUrl && currentTrack.expiredAt && new Date(currentTrack.expiredAt) < new Date()) {
+            this.logger.log(`🔄 Stream URL expired for track ${currentTrack._id}, refreshing...`);
+            await this.trackModel.findByIdAndUpdate(currentTrack._id, { status: 'processing' });
+            await this.audioQueue.add('audio-convert', {
+                trackId: currentTrack._id,
+                youtubeUrl: `https://www.youtube.com/watch?v=${currentTrack.youtubeVideoId}`,
+                roomId: roomId
+            });
+            // Update local object to reflect processing status
+            currentTrack.status = 'processing';
+        }
 
         return {
             currentTrack: currentTrack ? {
@@ -47,6 +64,7 @@ export class PlayerService {
                 thumbnail: currentTrack.thumbnail,
                 audioUrl: currentTrack.audioUrl,
                 duration: currentTrack.duration,
+                status: currentTrack.status,
             } : null,
             isPlaying: room.isPlaying,
             currentTime,
