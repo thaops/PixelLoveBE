@@ -65,15 +65,27 @@ export class AudioConvertWorker extends WorkerHost {
             // 1. Fetch Metadata (10%)
             this.emitProgress(roomId, trackId, 10, 'Đang quét link YouTube...');
             const cookiesPath = path.join(process.cwd(), 'cookies.txt');
+            const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+
             const ytOptions: any = {
                 dumpJson: true,
                 noWarnings: true,
                 noCheckCertificates: true,
                 preferFreeFormats: true,
-                referer: 'https://www.youtube.com/'
+                referer: 'https://www.youtube.com/',
+                userAgent: chromeUserAgent,
+                addHeader: [
+                    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'Accept-Language: en-US,en;q=0.9',
+                ],
+                forceIpv4: true,
+                extractorArgs: 'youtube:player_client=android,web',
+                noCacheDir: true,
+                geoBypass: true
             };
             if (fs.existsSync(cookiesPath)) {
                 ytOptions.cookies = cookiesPath;
+                this.logger.log('🍪 Using cookies.txt for authentication');
             }
 
             const metadata = await youtubedl(youtubeUrl, ytOptions);
@@ -92,6 +104,12 @@ export class AudioConvertWorker extends WorkerHost {
                 noWarnings: true,
                 noPlaylist: true,
                 ffmpegLocation: ffmpegInstaller.path,
+                userAgent: chromeUserAgent,
+                addHeader: ytOptions.addHeader,
+                forceIpv4: true,
+                extractorArgs: 'youtube:player_client=android,web',
+                noCacheDir: true,
+                geoBypass: true
             };
             if (fs.existsSync(cookiesPath)) {
                 downloadOptions.cookies = cookiesPath;
