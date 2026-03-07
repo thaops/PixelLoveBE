@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Track, TrackDocument } from './schemas/track.schema';
@@ -12,6 +12,7 @@ import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class TracksService {
+    private readonly logger = new Logger(TracksService.name);
     constructor(
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
         @InjectModel(CoupleRoom.name) private roomModel: Model<CoupleRoomDocument>,
@@ -26,91 +27,23 @@ export class TracksService {
         });
     }
 
-    async checkTrackByUrl(roomId: string, userId: string, youtubeUrl: string) {
-        const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-        const match = youtubeUrl.match(regExp);
-        const youtubeVideoId = (match && match[7].length === 11) ? match[7] : null;
-
-        if (!youtubeVideoId) throw new BadRequestException('URL YouTube không hợp lệ');
-
-        const existingTrack = await this.trackModel.findOne({ youtubeVideoId, status: 'ready' });
-        if (existingTrack) {
-            // Tự động add vào room luôn
-            const newTrack = new this.trackModel({
-                roomId: new Types.ObjectId(roomId),
-                youtubeVideoId,
-                title: existingTrack.title,
-                thumbnail: existingTrack.thumbnail,
-                duration: existingTrack.duration,
-                audioUrl: existingTrack.audioUrl,
-                status: 'ready',
-                isStreamUrl: existingTrack.isStreamUrl,
-                addedBy: new Types.ObjectId(userId),
-            });
-            const saved = await newTrack.save();
-
-            this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
-                type: 'added',
-                trackId: saved._id.toString(),
-                status: 'ready',
-                track: saved
-            });
-
-            return {
-                found: true,
-                track: saved
-            };
-        }
-
-        return {
-            found: false,
-            youtubeVideoId,
-        };
-    }
 
     async addTrackToRoom(roomId: string, userId: string, addTrackDto: AddTrackDto) {
         const room = await this.roomModel.findById(roomId);
-        if (!room) throw new NotFoundException('Room not found');
+        if (!room) throw new NotFoundException('Không tìm thấy phòng');
 
         const youtubeUrl = addTrackDto.youtubeUrl;
         const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
         const match = youtubeUrl.match(regExp);
         const youtubeVideoId = (match && match[7].length === 11) ? match[7] : null;
 
-        if (!youtubeVideoId) throw new BadRequestException('Invalid YouTube URL');
+        if (!youtubeVideoId) throw new BadRequestException('Link YouTube không hợp lệ');
 
-        // Case 1: Mobile already has the info (detached by mobile) OR server already has info
-        const title = addTrackDto.title || '';
-        const thumbnail = addTrackDto.thumbnail || `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`;
-        const audioUrl = addTrackDto.audioUrl || '';
-        const duration = addTrackDto.duration || 0;
+        // --- STEP 1: CHECK IF READY (Re-use existing audio) ---
+        const existingReady = await this.trackModel.findOne({ youtubeVideoId, status: 'ready' }).sort({ createdAt: -1 });
 
-        // Trust mobile if info is provided
-        if (title && audioUrl) {
-            const newTrack = new this.trackModel({
-                roomId: new Types.ObjectId(roomId),
-                youtubeVideoId,
-                title,
-                thumbnail,
-                duration,
-                audioUrl,
-                status: 'ready',
-                isStreamUrl: true, // If mobile sends link, it's likely a stream link
-                addedBy: new Types.ObjectId(userId),
-            });
-            const saved = await newTrack.save();
-            this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
-                type: 'added',
-                trackId: saved._id.toString(),
-                status: 'ready',
-                track: saved
-            });
-            return saved;
-        }
-
-        // Case 2: Server already prepared this track for another room
-        const existingReady = await this.trackModel.findOne({ youtubeVideoId, status: 'ready' });
         if (existingReady) {
+            this.logger.log(`♻️  Reusing existing track: ${youtubeVideoId}`);
             const newTrack = new this.trackModel({
                 roomId: new Types.ObjectId(roomId),
                 youtubeVideoId,
@@ -123,6 +56,7 @@ export class TracksService {
                 addedBy: new Types.ObjectId(userId),
             });
             const saved = await newTrack.save();
+
             this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
                 type: 'added',
                 trackId: saved._id.toString(),
@@ -132,28 +66,67 @@ export class TracksService {
             return saved;
         }
 
-        // Case 3: Start background processing
-        const existingProcessing = await this.trackModel.findOne({ youtubeVideoId, status: 'processing' });
+        // --- STEP 2: CHECK IF PROCESSING (Join existing queue) ---
+        // Use findOne and sort by newest to ensure we find any current processing track
+        const existingProcessing = await this.trackModel.findOne({
+            youtubeVideoId,
+            status: 'processing'
+        }).sort({ createdAt: -1 });
 
+        if (existingProcessing) {
+            this.logger.log(`🔗 Joining existing processing job for: ${youtubeVideoId}`);
+            const newTrack = new this.trackModel({
+                roomId: new Types.ObjectId(roomId),
+                youtubeVideoId,
+                title: existingProcessing.title || 'Đang chờ xử lý...',
+                thumbnail: existingProcessing.thumbnail || `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`,
+                duration: existingProcessing.duration || 0,
+                status: 'processing',
+                addedBy: new Types.ObjectId(userId),
+            });
+            const saved = await newTrack.save();
+
+            this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
+                type: 'added',
+                trackId: saved._id.toString(),
+                status: 'processing',
+                track: saved
+            });
+            return saved;
+        }
+
+        // --- STEP 3: CREATE NEW PROCESSING JOB ---
         const newTrack = new this.trackModel({
             roomId: new Types.ObjectId(roomId),
             youtubeVideoId,
-            title: existingProcessing?.title || 'Đang lấy thông tin...',
-            thumbnail: existingProcessing?.thumbnail || `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`,
-            duration: existingProcessing?.duration || 0,
+            title: 'Đang tải thông tin...',
+            thumbnail: `https://i.ytimg.com/vi/${youtubeVideoId}/hqdefault.jpg`,
+            duration: 0,
             status: 'processing',
             addedBy: new Types.ObjectId(userId),
         });
 
         const savedTrack = await newTrack.save();
 
-        if (!existingProcessing) {
+        try {
+            this.logger.log(`🚀 Dispatching new task to Worker: ${youtubeVideoId}`);
             await this.audioQueue.add('convert', {
                 trackId: savedTrack._id.toString(),
                 youtubeUrl: youtubeUrl,
                 youtubeVideoId: youtubeVideoId,
                 roomId: roomId,
+            }, {
+                attempts: 3,
+                backoff: { type: 'exponential', delay: 5000 },
+                removeOnComplete: true,
+                jobId: `yt-${youtubeVideoId}`, // Prevent duplicate jobs at Redis level
             });
+        } catch (queueError) {
+            this.logger.error(`❌ Queue Error: Redis is likely DOWN. Please start Redis!`);
+            // Optional: Mark as failed if queue is down
+            savedTrack.status = 'failed';
+            await savedTrack.save();
+            throw new BadRequestException('Hệ thống xử lý đang bận (Redis down), vui lòng thử lại sau.');
         }
 
         this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {

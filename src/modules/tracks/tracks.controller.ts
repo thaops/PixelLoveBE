@@ -2,7 +2,6 @@ import { Controller, Post, Body, Param, ParamData, UseGuards, Req, Delete } from
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam } from '@nestjs/swagger';
 import { TracksService } from './tracks.service';
 import { AddTrackDto } from './dto/add-track.dto';
-import { CheckTrackDto } from './dto/check-track.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 
 @ApiTags('Tracks (Room Audio)')
@@ -10,19 +9,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 @Controller('rooms')
 export class TracksController {
     constructor(private readonly tracksService: TracksService) { }
-
-    @UseGuards(JwtAuthGuard)
-    @Post('/tracks/check')
-    @ApiOperation({ summary: 'Kiểm tra xem bài hát đã tồn tại trong DB chưa, nếu có thì add luôn' })
-    @ApiBody({ type: CheckTrackDto })
-    async checkTrack(
-        @Body() checkTrackDto: CheckTrackDto,
-        @Req() req: any,
-    ) {
-        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        return this.tracksService.checkTrackByUrl(roomId, userId, checkTrackDto.youtubeUrl);
-    }
 
     @UseGuards(JwtAuthGuard)
     @Post('/tracks')

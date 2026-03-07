@@ -65,7 +65,9 @@ async function bootstrap() {
     .addTag('Album', 'Photo album management')
     .addTag('Home', 'Virtual home scene')
     .addTag('Cloudinary', 'Cloudinary upload utilities')
+    .addServer(process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000', 'Current API Server')
     .addServer('http://localhost:3000', 'Local development server')
+    .addServer('https://pixellovebe.onrender.com', 'Production server')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

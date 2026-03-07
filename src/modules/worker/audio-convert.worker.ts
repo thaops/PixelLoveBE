@@ -62,7 +62,7 @@ export class AudioConvertWorker extends WorkerHost {
     async process(job: Job<any, any, string>): Promise<any> {
         const { trackId, youtubeUrl, roomId, youtubeVideoId } = job.data;
         const videoId = youtubeVideoId;
-        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (Piped API Mode)`);
+        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (yt-dlp Mode)`);
 
         try {
             // Helper to notify all waiting rooms
@@ -77,15 +77,7 @@ export class AudioConvertWorker extends WorkerHost {
                 }
             };
 
-            // 1. Extract Video ID (already provided but fallback just in case)
-            if (!videoId) {
-                const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-                const match = youtubeUrl.match(regExp);
-                const extractedId = (match && match[7].length === 11) ? match[7] : null;
-                if (!extractedId) throw new Error('Invalid YouTube ID');
-            }
-
-            await notifyAllWaiting(30, 'Đang giải mã luồng âm thanh...');
+            await notifyAllWaiting(10, 'Đang trích xuất link âm thanh...');
 
             let streamUrl = '';
             let title = '';
@@ -93,119 +85,73 @@ export class AudioConvertWorker extends WorkerHost {
             let thumbnail = '';
             let success = false;
 
-            const axiosConfig = {
-                timeout: 8000,
-                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            };
-
-            // --- LỚP 1: COBALT API ---
+            // --- LỚP 1: YT-DLP WITH COOKIES (Primary) ---
             try {
-                this.logger.log(`🔗 Trying Cobalt API...`);
-                const cobaltResponse = await axios.post('https://api.cobalt.tools/api/json', {
-                    url: youtubeUrl,
-                    downloadMode: 'audio',
-                    audioFormat: 'mp3'
-                }, axiosConfig);
+                this.logger.log('🔗 Executing yt-dlp with cookies...');
+                const cookiesPath = path.join(process.cwd(), 'cookies.txt');
 
-                if (cobaltResponse.data?.url) {
-                    streamUrl = cobaltResponse.data.url;
-                    success = true;
-                    this.logger.log('🎯 Success via Cobalt API');
+                // Configuration for yt-dlp on Windows to find its own JS runtime (Node)
+                // This is critical for solving YouTube's signature challenges when using cookies
+                const ytOptions: any = {
+                    dumpSingleJson: true,
+                    noWarnings: true,
+                    forceIpv4: true,
+                    format: 'bestaudio',
+                    // Use web client as it matches most cookies.txt exports
+                    extractorArgs: 'youtube:player_client=web',
+                    noPlaylist: true,
+                };
+
+                if (fs.existsSync(cookiesPath)) {
+                    ytOptions.cookies = cookiesPath;
+                } else {
+                    this.logger.warn('⚠️ cookies.txt not found, attempting without it');
                 }
-            } catch (e) {
-                this.logger.warn(`⚠️ Cobalt API failed: ${e.message}`);
-            }
 
-            // --- LỚP 2: CLOUD GATEWAYS (Piped/Invidious) ---
-            if (!success) {
-                const gateways = [
-                    { url: 'https://pipedapi.kavin.rocks', type: 'piped' },
-                    { url: 'https://pa.il.ax', type: 'piped' },
-                    { url: 'https://pipedapi.rivo.lol', type: 'piped' },
-                    { url: 'https://piped-api.lunar.icu', type: 'piped' },
-                    { url: 'https://inv.tux.pizza', type: 'invidious' },
-                    { url: 'https://invidious.projectsegfau.lt', type: 'invidious' },
-                    { url: 'https://invidious.no-logs.com', type: 'invidious' }
-                ];
-
-                for (const gateway of gateways) {
-                    try {
-                        this.logger.log(`🔗 Trying ${gateway.type}: ${gateway.url}`);
-                        if (gateway.type === 'piped') {
-                            const res = await axios.get(`${gateway.url}/streams/${videoId}`, axiosConfig);
-                            if (res.data?.audioStreams?.length > 0) {
-                                streamUrl = res.data.audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0].url;
-                                title = res.data.title;
-                                duration = res.data.duration;
-                                thumbnail = res.data.thumbnailUrl;
-                                success = true;
-                            }
-                        } else {
-                            const res = await axios.get(`${gateway.url}/api/v1/videos/${videoId}`, axiosConfig);
-                            if (res.data?.adaptiveFormats?.length > 0) {
-                                streamUrl = res.data.adaptiveFormats.filter((f: any) => f.type?.includes('audio'))[0].url;
-                                title = res.data.title;
-                                duration = res.data.lengthSeconds;
-                                success = true;
-                            }
-                        }
-                        if (success) break;
-                    } catch (e) {
-                        this.logger.warn(`⚠️ Gateway ${gateway.url} failed: ${e.message}`);
-                    }
+                // Inject PATH to ensure node.exe is found for signature solving
+                const nodePath = 'C:\\nvm4w\\nodejs';
+                const originalPath = process.env.PATH || '';
+                if (!originalPath.includes(nodePath)) {
+                    process.env.PATH = `${nodePath};${originalPath}`;
                 }
-            }
 
-            // --- LỚP 3: YT-DLP FALLBACK (Bypass Mode) ---
-            if (!success) {
-                try {
-                    this.logger.log('🔗 Falling back to yt-dlp (Bypass Mode)...');
-                    const cookiesPath = path.join(process.cwd(), 'cookies.txt');
-                    const ytOptions: any = {
-                        dumpSingleJson: true,
-                        noWarnings: true,
-                        forceIpv4: true,
-                        format: 'bestaudio/best',
-                        extractorArgs: 'youtube:player_client=android,web',
-                        addHeader: ['Accept-Language: en-US,en;q=0.9']
-                    };
-                    if (fs.existsSync(cookiesPath)) ytOptions.cookies = cookiesPath;
+                const metadata = await youtubedl(youtubeUrl, ytOptions);
 
-                    const metadata = await youtubedl(youtubeUrl, ytOptions);
+                if (metadata && metadata.url) {
                     streamUrl = metadata.url;
                     title = metadata.title;
                     duration = metadata.duration;
                     thumbnail = metadata.thumbnail;
                     success = true;
-                    this.logger.log('🎯 Success via yt-dlp bypass fallback');
-                } catch (e) {
-                    this.logger.error(`❌ All layers failed: ${e.message}`);
+                    this.logger.log('🎯 Success via yt-dlp with cookies');
                 }
+            } catch (e) {
+                this.logger.warn(`⚠️ yt-dlp layer failed: ${e.message}`);
+                // Fallback to basic extraction if cookies fail or metadata is partial
             }
 
-            if (!success || !streamUrl) {
-                throw new Error('All Cloud Gateways (Piped/Invidious) failed. Please try again later.');
+            // --- LỚP 2: FALLBACK TO BASIC STREAM (If layers fail) ---
+            if (!success) {
+                this.logger.log('🔗 Attempting basic fallback...');
+                // You could add back Cobalt/Piped here if yt-dlp fails completely, 
+                // but per user request we focus on backend handling with yt-dlp.
+                throw new Error('Không thể lấy được link âm thanh từ YouTube. Vui lòng kiểm tra lại link hoặc file cookies.');
             }
 
             // 4. Permanent Storage: Upload to Cloudinary
-            await notifyAllWaiting(85, 'Đang chuẩn bị lưu trữ vĩnh viễn...');
+            await notifyAllWaiting(60, 'Đang tối ưu và lưu trữ audio (m4a)...');
             let finalAudioUrl = streamUrl;
             let isStream = true;
 
             try {
-                // We use Cloudinary's capability to upload from a URL directly.
-                // This is more efficient than downloading to our server and then uploading.
-                // Cloudinary also automatically handles conversion/optimization.
+                // Cloudinary handles transcoding to m4a/mp3 and provides permanent storage
                 const uploadResult = await cloudinary.uploader.upload(streamUrl, {
                     resource_type: 'video',
                     folder: 'youtube_tracks',
                     public_id: videoId,
                     overwrite: true,
-                    format: 'mp3',
+                    // m4a is requested for better mobile compatibility and smaller size
+                    format: 'm4a',
                 });
 
                 finalAudioUrl = uploadResult.secure_url;
@@ -213,6 +159,7 @@ export class AudioConvertWorker extends WorkerHost {
                 this.logger.log(`☁️ Uploaded to Cloudinary: ${finalAudioUrl}`);
             } catch (uploadError) {
                 this.logger.error(`❌ Cloudinary upload failed: ${uploadError.message}. Falling back to stream URL.`);
+                // If cloudinary fails, we still have the stream URL as fallback
             }
 
             // 5. Update Database for ALL processing tracks with this youtubeVideoId

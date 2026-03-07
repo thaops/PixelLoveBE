@@ -10,24 +10,4 @@ export class AddTrackDto {
     @IsString()
     @IsUrl()
     youtubeUrl: string;
-
-    @ApiProperty({ required: false })
-    @IsOptional()
-    @IsString()
-    title?: string;
-
-    @ApiProperty({ required: false })
-    @IsOptional()
-    @IsString()
-    thumbnail?: string;
-
-    @ApiProperty({ required: false })
-    @IsOptional()
-    @IsString()
-    audioUrl?: string;
-
-    @ApiProperty({ required: false })
-    @IsOptional()
-    @IsNumber()
-    duration?: number;
 }
