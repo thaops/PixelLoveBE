@@ -43,5 +43,6 @@ export class Track {
 export const TrackSchema = SchemaFactory.createForClass(Track);
 
 // Indexes
+TrackSchema.index({ youtubeVideoId: 1 });
 TrackSchema.index({ roomId: 1, status: 1 });
 TrackSchema.index({ createdAt: -1 });

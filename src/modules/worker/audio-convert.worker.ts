@@ -14,6 +14,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
 const youtubedl = require('youtube-dl-exec');
+import { promisify } from 'util';
+const pipeline = promisify(require('stream').pipeline);
 
 @Processor('audio-convert')
 @Injectable()
@@ -58,18 +60,32 @@ export class AudioConvertWorker extends WorkerHost {
     }
 
     async process(job: Job<any, any, string>): Promise<any> {
-        const { trackId, youtubeUrl, roomId } = job.data;
-        this.logger.log(`🔄 Processing job ${job.id} for track ${trackId} (Piped API Mode)`);
+        const { trackId, youtubeUrl, roomId, youtubeVideoId } = job.data;
+        const videoId = youtubeVideoId;
+        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (Piped API Mode)`);
 
         try {
-            // 1. Extract Video ID
-            const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-            const match = youtubeUrl.match(regExp);
-            const videoId = (match && match[7].length === 11) ? match[7] : null;
+            // Helper to notify all waiting rooms
+            const notifyAllWaiting = async (progress: number, message: string) => {
+                const tracks = await this.trackModel.find({ youtubeVideoId: videoId, status: 'processing' });
+                for (const t of tracks) {
+                    this.eventsGateway.emitToCoupleRoom(t.roomId.toString(), 'queue:progress', {
+                        trackId: t._id.toString(),
+                        progress,
+                        message
+                    });
+                }
+            };
 
-            if (!videoId) throw new Error('Invalid YouTube ID');
+            // 1. Extract Video ID (already provided but fallback just in case)
+            if (!videoId) {
+                const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+                const match = youtubeUrl.match(regExp);
+                const extractedId = (match && match[7].length === 11) ? match[7] : null;
+                if (!extractedId) throw new Error('Invalid YouTube ID');
+            }
 
-            this.emitProgress(roomId, trackId, 30, 'Đang giải mã luồng âm thanh...');
+            await notifyAllWaiting(30, 'Đang giải mã luồng âm thanh...');
 
             let streamUrl = '';
             let title = '';
@@ -175,36 +191,75 @@ export class AudioConvertWorker extends WorkerHost {
                 throw new Error('All Cloud Gateways (Piped/Invidious) failed. Please try again later.');
             }
 
-            // 4. Update Database
-            this.emitProgress(roomId, trackId, 80, 'Đang hoàn tất lưu trữ...');
-            const expiredAt = new Date(Date.now() + 5 * 60 * 60 * 1000); // 5 hours
+            // 4. Permanent Storage: Upload to Cloudinary
+            await notifyAllWaiting(85, 'Đang chuẩn bị lưu trữ vĩnh viễn...');
+            let finalAudioUrl = streamUrl;
+            let isStream = true;
 
-            const updatedTrack = await this.trackModel.findByIdAndUpdate(trackId, {
-                title: title,
-                thumbnail: thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-                duration: duration,
-                status: 'ready',
-                audioUrl: streamUrl,
-                isStreamUrl: true,
-                expiredAt: expiredAt,
-            }, { new: true });
+            try {
+                // We use Cloudinary's capability to upload from a URL directly.
+                // This is more efficient than downloading to our server and then uploading.
+                // Cloudinary also automatically handles conversion/optimization.
+                const uploadResult = await cloudinary.uploader.upload(streamUrl, {
+                    resource_type: 'video',
+                    folder: 'youtube_tracks',
+                    public_id: videoId,
+                    overwrite: true,
+                    format: 'mp3',
+                });
 
-            // 5. Finalize
-            this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
-                type: 'ready',
-                trackId,
+                finalAudioUrl = uploadResult.secure_url;
+                isStream = false;
+                this.logger.log(`☁️ Uploaded to Cloudinary: ${finalAudioUrl}`);
+            } catch (uploadError) {
+                this.logger.error(`❌ Cloudinary upload failed: ${uploadError.message}. Falling back to stream URL.`);
+            }
+
+            // 5. Update Database for ALL processing tracks with this youtubeVideoId
+            const updatedResult = await this.trackModel.updateMany(
+                { youtubeVideoId: videoId, status: 'processing' },
+                {
+                    title: title || 'YouTube Track',
+                    thumbnail: thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                    duration: duration,
+                    status: 'ready',
+                    audioUrl: finalAudioUrl,
+                    isStreamUrl: isStream,
+                    expiredAt: isStream ? new Date(Date.now() + 5 * 60 * 60 * 1000) : null,
+                }
+            );
+
+            this.logger.log(`✅ Updated ${updatedResult.modifiedCount} tracks to READY status`);
+
+            // 6. Notify all affected rooms
+            const waitingTracks = await this.trackModel.find({
+                youtubeVideoId: videoId,
                 status: 'ready',
-                track: updatedTrack
+                audioUrl: finalAudioUrl
             });
 
-            this.emitProgress(roomId, trackId, 100, 'Hoàn thành!');
-            this.logger.log(`✅ Job ${job.id} completed successfully (Cloud Gateway Mode)`);
+            for (const t of waitingTracks) {
+                this.eventsGateway.emitToCoupleRoom(t.roomId.toString(), 'queue:update', {
+                    type: 'ready',
+                    trackId: t._id.toString(),
+                    status: 'ready',
+                    track: t
+                });
+                this.eventsGateway.emitToCoupleRoom(t.roomId.toString(), 'queue:progress', {
+                    trackId: t._id.toString(),
+                    progress: 100,
+                    message: 'Hoàn thành!'
+                });
+            }
 
-            return { success: true, url: streamUrl };
+            return { success: true, url: finalAudioUrl };
 
         } catch (error) {
             this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
-            await this.trackModel.findByIdAndUpdate(trackId, { status: 'failed' });
+            await this.trackModel.updateMany(
+                { youtubeVideoId: job.data.youtubeVideoId || videoId, status: 'processing' },
+                { status: 'failed' }
+            );
             throw error;
         }
     }
