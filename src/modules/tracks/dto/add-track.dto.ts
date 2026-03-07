@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, IsUrl } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AddTrackDto {
@@ -12,17 +12,22 @@ export class AddTrackDto {
     youtubeUrl: string;
 
     @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
     title?: string;
 
     @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
     thumbnail?: string;
 
     @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
     audioUrl?: string;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
     duration?: number;
 }
