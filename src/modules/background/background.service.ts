@@ -12,7 +12,7 @@ export class BackgroundService {
   // Default background constant
   private readonly DEFAULT_BACKGROUND = {
     imageUrl:
-      'https://res.cloudinary.com/dukoun1pb/image/upload/v1769238533/background_ch%C3%ADnh_1_ckajnj.png',
+      'https://res.cloudinary.com/dukoun1pb/image/upload/v1772982148/Background_ch%C3%ADnh_fixed_y5nwqd.png',
     width: 4096,
     height: 1920,
   };
