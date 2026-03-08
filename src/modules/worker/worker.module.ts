@@ -5,6 +5,7 @@ import { Track, TrackSchema } from '../tracks/schemas/track.schema';
 import { BullModule } from '@nestjs/bullmq';
 import { AudioConvertWorker } from './audio-convert.worker';
 import { EventsModule } from '../events/events.module';
+import { CleanupService } from './cleanup.service';
 
 @Module({
     imports: [
@@ -14,6 +15,6 @@ import { EventsModule } from '../events/events.module';
         }),
         EventsModule,
     ],
-    providers: [AudioConvertWorker],
+    providers: [AudioConvertWorker, CleanupService],
 })
 export class WorkerModule { }

@@ -7,22 +7,21 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import { Track, TrackDocument } from '../tracks/schemas/track.schema';
-import { v2 as cloudinary } from 'cloudinary';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { EventsGateway } from '../events/events.gateway';
-import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as https from 'https';
 import * as os from 'os';
-const youtubedl = require('youtube-dl-exec');
+import { exec } from 'child_process';
 import { promisify } from 'util';
-const pipeline = promisify(require('stream').pipeline);
 
-@Processor('audio-convert', { concurrency: 2 })
+const execPromise = promisify(exec);
+
+@Processor('audio-convert', { concurrency: 3 })
 @Injectable()
 export class AudioConvertWorker extends WorkerHost {
     private readonly logger = new Logger(AudioConvertWorker.name);
-    private proxies: string[] = [];
+    private s3Client: S3Client;
 
     constructor(
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
@@ -32,15 +31,13 @@ export class AudioConvertWorker extends WorkerHost {
         super();
         this.logger.log('💿 Audio Convert Worker Initialized');
 
-        const proxiesPath = path.join(process.cwd(), 'proxies.txt');
-        if (fs.existsSync(proxiesPath)) {
-            this.proxies = fs.readFileSync(proxiesPath, 'utf8')
-                .split('\n')
-                .map(p => p.trim())
-                .filter(Boolean)
-                .map(p => p.startsWith('http') ? p : `http://${p}`);
-            this.logger.log(`🔄 Loaded ${this.proxies.length} proxies from proxies.txt`);
-        }
+        this.s3Client = new S3Client({
+            region: this.configService.get<string>('AWS_REGION') || 'ap-southeast-1',
+            credentials: {
+                accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID') || '',
+                secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY') || '',
+            },
+        });
     }
 
     private emitProgress(roomId: string, trackId: string, progress: number, message: string) {
@@ -51,28 +48,42 @@ export class AudioConvertWorker extends WorkerHost {
         });
     }
 
-    private async testProxy(proxyStr: string): Promise<boolean> {
-        if (!proxyStr) return false;
-        try {
-            const urlParts = new URL(proxyStr);
-            await axios.get('https://www.youtube.com', {
-                proxy: {
-                    protocol: urlParts.protocol,
-                    host: urlParts.hostname,
-                    port: Number(urlParts.port)
-                },
-                timeout: 3000
-            });
-            return true;
-        } catch {
-            return false;
+    private async uploadToS3(filePath: string, videoId: string): Promise<string> {
+        const bucket = this.configService.get<string>('AWS_S3_BUCKET_NAME');
+        const region = this.configService.get<string>('AWS_REGION') || 'ap-southeast-1';
+        const fileStream = fs.createReadStream(filePath);
+
+        const command = new PutObjectCommand({
+            Bucket: bucket,
+            Key: `youtube_tracks/${videoId}.mp3`,
+            Body: fileStream,
+            ContentType: 'audio/mpeg',
+            ACL: 'public-read' // Cấp file public
+        });
+
+        await this.s3Client.send(command);
+        return `https://${bucket}.s3.${region}.amazonaws.com/youtube_tracks/${videoId}.mp3`;
+    }
+
+    private async getMetadata(youtubeUrl: string, cookiesPath?: string) {
+        let cmd = `yt-dlp --dump-json --no-playlist ${youtubeUrl}`;
+        if (cookiesPath && fs.existsSync(cookiesPath)) {
+            cmd = `yt-dlp --cookies "${cookiesPath}" --dump-json --no-playlist ${youtubeUrl}`;
         }
+
+        const { stdout } = await execPromise(cmd);
+        const data = JSON.parse(stdout);
+        return {
+            title: data.title,
+            duration: data.duration,
+            thumbnail: data.thumbnail
+        };
     }
 
     async process(job: Job<any, any, string>): Promise<any> {
         const { trackId, youtubeUrl, roomId, youtubeVideoId } = job.data;
         const videoId = youtubeVideoId;
-        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (yt-dlp Mode)`);
+        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (yt-dlp S3 Mode)`);
 
         try {
             const existing = await this.trackModel.findOne({
@@ -104,163 +115,88 @@ export class AudioConvertWorker extends WorkerHost {
                         status: 'ready',
                         track: t
                     });
-                    this.eventsGateway.emitToCoupleRoom(t.roomId.toString(), 'queue:progress', {
-                        trackId: t._id.toString(),
-                        progress: 100,
-                        message: 'Hoàn thành!'
-                    });
+                    this.emitProgress(t.roomId.toString(), t._id.toString(), 100, 'Hoàn thành!');
                 }
 
                 return { success: true, url: existing.audioUrl };
             }
 
-            // Helper to notify all waiting rooms
             const notifyAllWaiting = async (progress: number, message: string) => {
                 const tracks = await this.trackModel.find({ youtubeVideoId: videoId, status: 'processing' });
                 for (const t of tracks) {
-                    this.eventsGateway.emitToCoupleRoom(t.roomId.toString(), 'queue:progress', {
-                        trackId: t._id.toString(),
-                        progress,
-                        message
-                    });
+                    this.emitProgress(t.roomId.toString(), t._id.toString(), progress, message);
                 }
             };
 
-            await notifyAllWaiting(10, 'Đang trích xuất link âm thanh...');
+            await notifyAllWaiting(10, 'Đang trích xuất metadata...');
 
-            let streamUrl = '';
+            // Lấy Metadata
             let title = '';
             let duration = 0;
             let thumbnail = '';
-            let success = false;
-            let workingProxy = '';
-
-            // --- LỚP 1: YT-DLP (Primary) ---
-            try {
-                this.logger.log('🔗 Executing yt-dlp retry loop...');
-
-                const ytOptions: any = {
-                    dumpSingleJson: true,
-                    noWarnings: true,
-                    forceIpv4: true,
-                    format: 'bestaudio[ext=m4a]/bestaudio',
-                    extractorArgs: 'youtube:player_client=android,ios,web',
-                    noPlaylist: true,
-                    socketTimeout: 8000,
-                };
-
-                const proxies = [...this.proxies];
-                if (proxies.length === 0) proxies.push('');
-
-                let metadata: any = null;
-                const maxRetries = Math.min(10, proxies.length || 1);
-
-                for (let i = 0; i < maxRetries; i++) {
-                    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-
-                    if (proxy) {
-                        this.logger.log(`🔍 Testing proxy: ${proxy}`);
-                        const isWorking = await this.testProxy(proxy);
-                        if (!isWorking) {
-                            this.logger.log(`❌ Proxy test failed: ${proxy}, skipping...`);
-                            continue;
-                        }
-                    }
-
-                    try {
-                        if (proxy) {
-                            this.logger.log(`🌐 Trying yt-dlp with proxy: ${proxy}`);
-                            ytOptions.proxy = proxy;
-                        } else {
-                            this.logger.log(`🌐 Trying without proxy`);
-                            delete ytOptions.proxy;
-                        }
-
-                        metadata = await youtubedl(youtubeUrl, ytOptions);
-
-                        if (metadata && metadata.url) {
-                            this.logger.log(`✅ Proxy yt-dlp success: ${proxy || 'none'}`);
-                            workingProxy = proxy;
-                            streamUrl = metadata.url;
-                            title = metadata.title;
-                            duration = metadata.duration;
-                            thumbnail = metadata.thumbnail;
-                            success = true;
-                            break;
-                        }
-                    } catch (err) {
-                        this.logger.warn(`❌ Proxy yt-dlp failed: ${proxy || 'none'}`);
-                    }
-                }
-
-                if (!success) {
-                    throw new Error("All proxies failed or YouTube blocked the requests.");
-                }
-            } catch (e) {
-                const errorMsg = e.message || '';
-                this.logger.warn(`⚠️ yt-dlp extraction failed: ${errorMsg.split('\n')[0]}`);
-            }
-
-            // --- LỚP 2: FALLBACK TO BASIC STREAM (If layers fail) ---
-            if (!success) {
-                this.logger.log('🔗 Attempting basic fallback...');
-                // You could add back Cobalt/Piped here if yt-dlp fails completely, 
-                // but per user request we focus on backend handling with yt-dlp.
-                throw new Error('Không thể lấy được link âm thanh từ YouTube. Vui lòng kiểm tra lại link hoặc file cookies.');
-            }
-
-            // 4. Download local via yt-dlp before uploading to Cloudinary
-            await notifyAllWaiting(60, 'Đang tải audio về server...');
-            let finalAudioUrl = streamUrl;
-            let isStream = true;
-
-            const tempFilePath = path.join(os.tmpdir(), `${videoId}.m4a`);
+            const cookiesPath = path.join(process.cwd(), 'configs', 'cookies.txt');
 
             try {
-                const downloadOptions: any = {
-                    extractAudio: true,
-                    audioFormat: 'm4a',
-                    output: tempFilePath,
-                    format: 'bestaudio[ext=m4a]/bestaudio',
-                    extractorArgs: 'youtube:player_client=android,ios,web',
-                    noPlaylist: true,
-                    socketTimeout: 8000,
-                };
+                const meta = await this.getMetadata(youtubeUrl);
+                title = meta.title;
+                duration = meta.duration;
+                thumbnail = meta.thumbnail;
+            } catch (err) {
+                this.logger.warn(`Lấy info lỗi, thử lại với cookies.txt...`);
+                const metaFallback = await this.getMetadata(youtubeUrl, cookiesPath);
+                title = metaFallback.title;
+                duration = metaFallback.duration;
+                thumbnail = metaFallback.thumbnail;
+            }
 
-                if (workingProxy) {
-                    downloadOptions.proxy = workingProxy;
-                }
+            await notifyAllWaiting(30, 'Đang tải audio và convert sang mp3...');
 
-                this.logger.log(`📥 Downloading audio locally using working proxy...`);
-                await youtubedl(youtubeUrl, downloadOptions);
+            const tempDir = path.join(os.tmpdir(), 'youtube');
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
+            }
 
-                if (!fs.existsSync(tempFilePath)) {
-                    throw new Error('Local file not found after download');
-                }
+            const tempFilePath = path.join(tempDir, `${videoId}.mp3`);
 
-                await notifyAllWaiting(80, 'Đang tải audio lên Cloudinary...');
-
-                const uploadResult = await cloudinary.uploader.upload(tempFilePath, {
-                    resource_type: 'video',
-                    folder: 'youtube_tracks',
-                    public_id: videoId,
-                    overwrite: true,
-                    format: 'm4a',
-                });
-
-                finalAudioUrl = uploadResult.secure_url;
-                isStream = false;
-                this.logger.log(`☁️ Uploaded to Cloudinary: ${finalAudioUrl}`);
-
+            // Xoá file cũ nếu đang tồn tại
+            if (fs.existsSync(tempFilePath)) {
                 fs.unlinkSync(tempFilePath);
-            } catch (uploadError) {
-                this.logger.error(`❌ Download/Upload failed: ${uploadError.message}. Falling back to stream URL.`);
-                if (fs.existsSync(tempFilePath)) {
-                    fs.unlinkSync(tempFilePath);
+            }
+
+            const ytFlags = `--no-playlist --extractor-retries 5 --fragment-retries 5 --concurrent-fragments 5 -x --audio-format mp3 --audio-quality 192K`;
+
+            try {
+                this.logger.log(`📥 Downloading (Normal Mode)...`);
+                await execPromise(`yt-dlp ${ytFlags} -o "${tempDir}/%(id)s.%(ext)s" ${youtubeUrl}`);
+            } catch (error) {
+                this.logger.warn(`❌ Normal mode failed: ${error.message}. Fallback to cookies...`);
+                if (fs.existsSync(cookiesPath)) {
+                    await execPromise(`yt-dlp --cookies "${cookiesPath}" ${ytFlags} -o "${tempDir}/%(id)s.%(ext)s" ${youtubeUrl}`);
+                } else {
+                    throw new Error('Normal download failed and no cookies.txt found in /configs/');
                 }
             }
 
-            // 5. Update Database for ALL processing tracks with this youtubeVideoId
+            if (!fs.existsSync(tempFilePath)) {
+                throw new Error('Local file not found after download');
+            }
+
+            await notifyAllWaiting(80, 'Đang upload sang S3...');
+
+            let finalAudioUrl = '';
+            try {
+                finalAudioUrl = await this.uploadToS3(tempFilePath, videoId);
+                this.logger.log(`☁️ Uploaded to S3: ${finalAudioUrl}`);
+
+                // Keep temp file for cleanup cron job later or delete immediately to save space?
+                // Yêu cầu "cron mỗi 1h delete temp files", nên có thể để lại. Hoặc xoá luôn an toàn hơn.
+                // Thôi, không unlink file tmp để cron xóa theo logic user.
+            } catch (uploadError) {
+                this.logger.error(`❌ Upload S3 failed: ${uploadError.message}`);
+                throw uploadError;
+            }
+
+            // Update Database for ALL processing tracks
             const updatedResult = await this.trackModel.updateMany(
                 { youtubeVideoId: videoId, status: 'processing' },
                 {
@@ -269,14 +205,13 @@ export class AudioConvertWorker extends WorkerHost {
                     duration: duration,
                     status: 'ready',
                     audioUrl: finalAudioUrl,
-                    isStreamUrl: isStream,
-                    expiredAt: isStream ? new Date(Date.now() + 5 * 60 * 60 * 1000) : null,
+                    isStreamUrl: false,
+                    expiredAt: null,
                 }
             );
 
             this.logger.log(`✅ Updated ${updatedResult.modifiedCount} tracks to READY status`);
 
-            // 6. Notify all affected rooms
             const waitingTracks = await this.trackModel.find({
                 youtubeVideoId: videoId,
                 status: 'ready',
@@ -290,11 +225,7 @@ export class AudioConvertWorker extends WorkerHost {
                     status: 'ready',
                     track: t
                 });
-                this.eventsGateway.emitToCoupleRoom(t.roomId.toString(), 'queue:progress', {
-                    trackId: t._id.toString(),
-                    progress: 100,
-                    message: 'Hoàn thành!'
-                });
+                this.emitProgress(t.roomId.toString(), t._id.toString(), 100, 'Hoàn thành!');
             }
 
             return { success: true, url: finalAudioUrl };
