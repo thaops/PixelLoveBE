@@ -51,6 +51,24 @@ export class AudioConvertWorker extends WorkerHost {
         });
     }
 
+    private async testProxy(proxyStr: string): Promise<boolean> {
+        if (!proxyStr) return false;
+        try {
+            const urlParts = new URL(proxyStr);
+            await axios.get('https://www.youtube.com', {
+                proxy: {
+                    protocol: urlParts.protocol,
+                    host: urlParts.hostname,
+                    port: Number(urlParts.port)
+                },
+                timeout: 3000
+            });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     async process(job: Job<any, any, string>): Promise<any> {
         const { trackId, youtubeUrl, roomId, youtubeVideoId } = job.data;
         const videoId = youtubeVideoId;
@@ -128,20 +146,30 @@ export class AudioConvertWorker extends WorkerHost {
                     format: 'bestaudio[ext=m4a]/bestaudio',
                     extractorArgs: 'youtube:player_client=android,ios,web',
                     noPlaylist: true,
-                    socketTimeout: 15000,
+                    socketTimeout: 8000,
                 };
 
                 const proxies = [...this.proxies];
                 if (proxies.length === 0) proxies.push('');
 
                 let metadata: any = null;
-                const maxRetries = Math.min(10, proxies.length);
+                const maxRetries = Math.min(10, proxies.length || 1);
 
                 for (let i = 0; i < maxRetries; i++) {
                     const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+
+                    if (proxy) {
+                        this.logger.log(`🔍 Testing proxy: ${proxy}`);
+                        const isWorking = await this.testProxy(proxy);
+                        if (!isWorking) {
+                            this.logger.log(`❌ Proxy test failed: ${proxy}, skipping...`);
+                            continue;
+                        }
+                    }
+
                     try {
                         if (proxy) {
-                            this.logger.log(`🌐 Trying proxy: ${proxy}`);
+                            this.logger.log(`🌐 Trying yt-dlp with proxy: ${proxy}`);
                             ytOptions.proxy = proxy;
                         } else {
                             this.logger.log(`🌐 Trying without proxy`);
@@ -151,7 +179,7 @@ export class AudioConvertWorker extends WorkerHost {
                         metadata = await youtubedl(youtubeUrl, ytOptions);
 
                         if (metadata && metadata.url) {
-                            this.logger.log(`✅ Proxy success: ${proxy || 'none'}`);
+                            this.logger.log(`✅ Proxy yt-dlp success: ${proxy || 'none'}`);
                             workingProxy = proxy;
                             streamUrl = metadata.url;
                             title = metadata.title;
@@ -161,7 +189,7 @@ export class AudioConvertWorker extends WorkerHost {
                             break;
                         }
                     } catch (err) {
-                        this.logger.warn(`❌ Proxy failed: ${proxy || 'none'}`);
+                        this.logger.warn(`❌ Proxy yt-dlp failed: ${proxy || 'none'}`);
                     }
                 }
 
@@ -196,7 +224,7 @@ export class AudioConvertWorker extends WorkerHost {
                     format: 'bestaudio[ext=m4a]/bestaudio',
                     extractorArgs: 'youtube:player_client=android,ios,web',
                     noPlaylist: true,
-                    socketTimeout: 15000,
+                    socketTimeout: 8000,
                 };
 
                 if (workingProxy) {
