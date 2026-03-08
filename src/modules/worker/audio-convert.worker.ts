@@ -81,6 +81,11 @@ export class AudioConvertWorker extends WorkerHost {
     }
 
     async process(job: Job<any, any, string>): Promise<any> {
+        if (this.configService.get<string>('IS_WORKER') !== 'true') {
+            this.logger.warn(`⚠️ Skipped job ${job.id} - Not a worker instance.`);
+            return;
+        }
+
         const { trackId, youtubeUrl, roomId, youtubeVideoId } = job.data;
         const videoId = youtubeVideoId;
         this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (yt-dlp S3 Mode)`);
