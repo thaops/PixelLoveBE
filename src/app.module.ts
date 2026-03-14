@@ -25,6 +25,7 @@ import { TracksModule } from './modules/tracks/tracks.module';
 import { BullModule } from '@nestjs/bullmq';
 import { WorkerModule } from './modules/worker/worker.module';
 import { PlayerModule } from './modules/player/player.module';
+import { YoutubeModule } from './modules/youtube/youtube.module';
 
 /**
  * App Module
@@ -114,6 +115,7 @@ import { PlayerModule } from './modules/player/player.module';
     TracksModule,
     WorkerModule,
     PlayerModule,
+    YoutubeModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

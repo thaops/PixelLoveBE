@@ -17,6 +17,9 @@ import { promisify } from 'util';
 
 const execPromise = promisify(exec);
 
+import { YoutubeService } from '../youtube/youtube.service';
+import axios from 'axios';
+
 @Processor('audio-convert', { concurrency: 3 })
 @Injectable()
 export class AudioConvertWorker extends WorkerHost {
@@ -27,9 +30,10 @@ export class AudioConvertWorker extends WorkerHost {
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
         private configService: ConfigService,
         private readonly eventsGateway: EventsGateway,
+        private readonly youtubeService: YoutubeService,
     ) {
         super();
-        this.logger.log('💿 Audio Convert Worker Initialized');
+        this.logger.log('💿 Audio Convert Worker Initialized (Y2Mate Mode)');
 
         this.s3Client = new S3Client({
             region: this.configService.get<string>('AWS_REGION') || 'ap-southeast-1',
@@ -65,6 +69,25 @@ export class AudioConvertWorker extends WorkerHost {
         return `https://${bucket}.s3.${region}.amazonaws.com/youtube_tracks/${videoId}.mp3`;
     }
 
+    private async downloadFromUrl(url: string, destPath: string) {
+        const response = await axios({
+            method: 'get',
+            url: url,
+            responseType: 'stream',
+            headers: {
+                'origin': 'https://v1.y2mate.nu',
+                'referer': 'https://v1.y2mate.nu/',
+                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+            }
+        });
+        const writer = fs.createWriteStream(destPath);
+        response.data.pipe(writer);
+        return new Promise((resolve, reject) => {
+            writer.on('finish', () => resolve(true));
+            writer.on('error', (err) => reject(err));
+        });
+    }
+
     private async getMetadata(youtubeUrl: string, cookiesPath?: string) {
         let cmd = `yt-dlp --dump-json --no-playlist ${youtubeUrl}`;
         if (cookiesPath && fs.existsSync(cookiesPath)) {
@@ -88,7 +111,7 @@ export class AudioConvertWorker extends WorkerHost {
 
         const { trackId, youtubeUrl, roomId, youtubeVideoId } = job.data;
         const videoId = youtubeVideoId;
-        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (yt-dlp S3 Mode)`);
+        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (Y2Mate S3 Mode)`);
 
         try {
             const existing = await this.trackModel.findOne({
@@ -97,7 +120,7 @@ export class AudioConvertWorker extends WorkerHost {
             });
 
             if (existing && existing.audioUrl) {
-                this.logger.log(`♻️ Video ${videoId} already converted. Skipping yt-dlp.`);
+                this.logger.log(`♻️ Video ${videoId} already converted. Reusing...`);
 
                 await this.trackModel.updateMany(
                     { youtubeVideoId: videoId, status: 'processing' },
@@ -135,7 +158,7 @@ export class AudioConvertWorker extends WorkerHost {
 
             await notifyAllWaiting(10, 'Đang trích xuất metadata...');
 
-            // Lấy Metadata
+            // Lấy Metadata (vẫn dùng yt-dlp vì cần duration)
             let title = '';
             let duration = 0;
             let thumbnail = '';
@@ -147,14 +170,18 @@ export class AudioConvertWorker extends WorkerHost {
                 duration = meta.duration;
                 thumbnail = meta.thumbnail;
             } catch (err) {
-                this.logger.warn(`Lấy info lỗi, thử lại với cookies.txt...`);
-                const metaFallback = await this.getMetadata(youtubeUrl, cookiesPath);
-                title = metaFallback.title;
-                duration = metaFallback.duration;
-                thumbnail = metaFallback.thumbnail;
+                this.logger.warn(`Lấy info metadata lỗi: ${err.message}`);
+                // Metadata failure is not fatal if we can get it from Y2Mate later
             }
 
-            await notifyAllWaiting(30, 'Đang tải audio và convert sang mp3...');
+            await notifyAllWaiting(30, 'Đang lấy link tải từ Y2Mate...');
+
+            // Gọi YoutubeService để lấy link MP3 từ Y2Mate
+            const y2mateInfo = await this.youtubeService.convertToMp3(videoId);
+            if (!title) title = y2mateInfo.title;
+            const downloadUrl = y2mateInfo.downloadUrl;
+
+            await notifyAllWaiting(50, 'Đang tải audio từ Y2Mate...');
 
             const tempDir = path.join(os.tmpdir(), 'youtube');
             if (!fs.existsSync(tempDir)) {
@@ -162,40 +189,26 @@ export class AudioConvertWorker extends WorkerHost {
             }
 
             const tempFilePath = path.join(tempDir, `${videoId}.mp3`);
+            if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
 
-            // Xoá file cũ nếu đang tồn tại
-            if (fs.existsSync(tempFilePath)) {
-                fs.unlinkSync(tempFilePath);
-            }
-
-            const ytFlags = `--no-playlist --extractor-retries 5 --fragment-retries 5 --concurrent-fragments 5 -x --audio-format mp3 --audio-quality 192K`;
-
+            // Tải file từ Y2Mate
             try {
-                this.logger.log(`📥 Downloading (Normal Mode)...`);
-                await execPromise(`yt-dlp ${ytFlags} -o "${tempDir}/%(id)s.%(ext)s" ${youtubeUrl}`);
-            } catch (error) {
-                this.logger.warn(`❌ Normal mode failed: ${error.message}. Fallback to cookies...`);
-                if (fs.existsSync(cookiesPath)) {
-                    await execPromise(`yt-dlp --cookies "${cookiesPath}" ${ytFlags} -o "${tempDir}/%(id)s.%(ext)s" ${youtubeUrl}`);
-                } else {
-                    throw new Error('Normal download failed and no cookies.txt found in /configs/');
-                }
+                await this.downloadFromUrl(downloadUrl, tempFilePath);
+            } catch (downloadError) {
+                this.logger.error(`❌ Download from Y2Mate failed: ${downloadError.message}`);
+                throw new Error(`Không thể tải nhạc từ provider: ${downloadError.message}`);
             }
 
             if (!fs.existsSync(tempFilePath)) {
-                throw new Error('Local file not found after download');
+                throw new Error('Local file not found after download from Y2Mate');
             }
 
-            await notifyAllWaiting(80, 'Đang upload sang S3...');
+            await notifyAllWaiting(80, 'Đang lưu trữ lên hệ thống...');
 
             let finalAudioUrl = '';
             try {
                 finalAudioUrl = await this.uploadToS3(tempFilePath, videoId);
                 this.logger.log(`☁️ Uploaded to S3: ${finalAudioUrl}`);
-
-                // Keep temp file for cleanup cron job later or delete immediately to save space?
-                // Yêu cầu "cron mỗi 1h delete temp files", nên có thể để lại. Hoặc xoá luôn an toàn hơn.
-                // Thôi, không unlink file tmp để cron xóa theo logic user.
             } catch (uploadError) {
                 this.logger.error(`❌ Upload S3 failed: ${uploadError.message}`);
                 throw uploadError;
