@@ -40,7 +40,7 @@ async function testFlow() {
         const { paramName, token, t } = await getAuthToken();
         console.log(`Generated Auth: ${paramName}=${token}, t=${t}`);
 
-        const videoId = 'dQw4w9WgXcQ';
+        const videoId = 'H8NTALzm0F4';
         const headers = {
             'accept': '*/*',
             'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',

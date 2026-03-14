@@ -58,6 +58,7 @@ export class YoutubeService implements OnModuleInit, OnModuleDestroy {
             const token = e.length > 32 ? e.substring(0, 32) : e;
             const paramName = String.fromCharCode(paramNameCode);
 
+            this.logger.log(`Dynamic Auth extracted: ${paramName}=${token}`);
             return { paramName, token };
         } catch (error) {
             this.logger.error(`Failed to get dynamic auth: ${error.message}`);
@@ -91,6 +92,7 @@ export class YoutubeService implements OnModuleInit, OnModuleDestroy {
 
         try {
             // STEP 1: Init
+            this.logger.log(`[Step 1] Initializing conversion for ${videoId}...`);
             const initRes = await axios.get('https://eta.etacloud.org/api/v1/init', {
                 params: {
                     [paramName]: token,
@@ -100,20 +102,26 @@ export class YoutubeService implements OnModuleInit, OnModuleDestroy {
             });
 
             if (initRes.data.error !== 0 && initRes.data.error !== "0") {
+                this.logger.error(`[Step 1] Init failed: ${JSON.stringify(initRes.data)}`);
                 throw new Error(`Init failed: ${initRes.data.error}`);
             }
 
             const convertURL = initRes.data.convertURL;
+            this.logger.log(`[Step 1] Success. ConvertURL: ${convertURL}`);
 
             // STEP 2: Convert
+            this.logger.log('[Step 2] Sending conversion request...');
             const convertFullUrl = `${convertURL}&v=${videoId}&f=mp3&t=${t}`;
             let convertRes = await axios.get(convertFullUrl, { headers });
+            this.logger.log(`[Step 2] Response: ${JSON.stringify(convertRes.data)}`);
 
             // STEP 3: Follow redirect
             if (convertRes.data.redirect === 1 || convertRes.data.redirect === "1") {
                 const redirectURL = convertRes.data.redirectURL;
+                this.logger.log(`[Step 3] Following redirect to: ${redirectURL}`);
                 const redirectFullUrl = `${redirectURL}&v=${videoId}&f=mp3&t=${t}`;
                 convertRes = await axios.get(redirectFullUrl, { headers });
+                this.logger.log(`[Step 3] Final Response: ${JSON.stringify(convertRes.data)}`);
             }
 
             const data = convertRes.data;
