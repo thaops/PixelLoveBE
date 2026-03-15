@@ -110,6 +110,15 @@ export class TracksService {
 
         try {
             this.logger.log(`🚀 Dispatching new task to Worker: ${youtubeVideoId}`);
+            
+            // Xóa job cũ nếu bị kẹt trong Redis để đảm bảo job mới được chạy
+            const jobId = `yt-${youtubeVideoId}`;
+            const oldJob = await this.audioQueue.getJob(jobId);
+            if (oldJob) {
+                await oldJob.remove();
+                this.logger.debug(`🗑️ Removed old stuck job in Redis: ${jobId}`);
+            }
+
             await this.audioQueue.add('convert', {
                 trackId: savedTrack._id.toString(),
                 youtubeUrl: youtubeUrl,
@@ -119,7 +128,7 @@ export class TracksService {
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 5000 },
                 removeOnComplete: true,
-                jobId: `yt-${youtubeVideoId}`, // Prevent duplicate jobs at Redis level
+                jobId: jobId, 
             });
         } catch (queueError) {
             this.logger.error(`❌ Queue Error: Redis is likely DOWN. Please start Redis!`);

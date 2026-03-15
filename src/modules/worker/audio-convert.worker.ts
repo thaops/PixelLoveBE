@@ -1,7 +1,7 @@
 // @ts-ignore
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 // @ts-ignore
-import { Job } from 'bullmq';
+import { Job, Worker } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -28,6 +28,30 @@ ffmpeg.setFfprobePath(ffprobeInstaller.path);
 @Injectable()
 export class AudioConvertWorker extends WorkerHost {
     private readonly logger = new Logger(AudioConvertWorker.name);
+
+    onModuleInit() {
+        const isWorker = this.configService.get<string>('IS_WORKER');
+        const redisHost = this.configService.get<string>('REDIS_HOST');
+        this.logger.log(`👷 WORKER MODULE BOOTING...`);
+        this.logger.log(`📊 Mode: ${isWorker === 'true' ? 'ACTIVE WORKER' : 'API ONLY'}`);
+        this.logger.log(`🔗 Target Redis Host: ${redisHost || 'Using REDIS_URL'}`);
+    }
+
+    // Lắng nghe sự kiện Job bắt đầu chạy
+    @OnWorkerEvent('active')
+    onActive(job: Job) {
+        this.logger.log(`⚡ Job ${job.id} is now ACTIVE and being processed...`);
+    }
+
+    @OnWorkerEvent('completed')
+    onCompleted(job: Job) {
+        this.logger.log(`✨ Job ${job.id} has COMPLETED successfully.`);
+    }
+
+    @OnWorkerEvent('failed')
+    onFailed(job: Job, error: Error) {
+        this.logger.error(`💀 Job ${job.id} FAILED: ${error.message}`);
+    }
 
     constructor(
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
@@ -119,7 +143,7 @@ export class AudioConvertWorker extends WorkerHost {
 
     async process(job: Job<any, any, string>): Promise<any> {
         if (this.configService.get<string>('IS_WORKER') !== 'true') {
-            this.logger.warn(`⚠️ Skipped job ${job.id} - Not a worker instance.`);
+            this.logger.warn(`⚠️ Skipped job ${job.id} - This instance is NOT configured as a Worker (IS_WORKER != true)`);
             return;
         }
 
