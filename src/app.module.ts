@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import Redis from 'ioredis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { getMongoConfig } from './config/mongo.config';
@@ -54,44 +55,21 @@ import { YoutubeModule } from './modules/youtube/youtube.module';
         const redisUrl = configService.get<string>('REDIS_URL');
         const host = configService.get<string>('REDIS_HOST', '127.0.0.1');
         const portValue = configService.get<string | number>('REDIS_PORT', 6379);
+        const port = typeof portValue === 'string' ? parseInt(portValue, 10) : portValue;
 
-        // --- 1. Use REDIS_URL if provided (Highest Priority) ---
         if (redisUrl) {
-          try {
-            const normalizedUrl = redisUrl.includes('://') ? redisUrl : `redis://${redisUrl}`;
-            const parsed = new URL(normalizedUrl);
-            const port = parseInt(parsed.port, 10);
-            const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
-
-            console.log(`📡 Connecting to Redis via URL: ${parsed.hostname}`);
-            return {
-              connection: {
-                host: parsed.hostname,
-                port: isNaN(port) ? 6379 : port,
-                username: parsed.username || undefined,
-                password: parsed.password || undefined,
-                maxRetriesPerRequest: null,
-                tls: normalizedUrl.startsWith('rediss://') ? {} : undefined,
-                family: isLocal ? 4 : undefined, // Force IPv4 only for local URLs
-              },
-            };
-          } catch (e) {
-            console.error('⚠️ Failed to parse REDIS_URL: ', e.message);
-          }
+          return {
+            connection: new Redis(redisUrl, {
+              maxRetriesPerRequest: null,
+            }),
+          };
         }
 
-        // --- 2. Use Host/Port fallback (Local dev environment) ---
-        const finalHost = (host === 'localhost' || !host) ? '127.0.0.1' : host;
-        const port = typeof portValue === 'string' ? parseInt(portValue, 10) : portValue;
-        const finalPort = isNaN(port) ? 6379 : port;
-
-        console.log(`🏠 Connecting to Redis (Host/Port): ${finalHost}:${finalPort}`);
         return {
           connection: {
-            host: finalHost,
-            port: finalPort,
+            host: (host === 'localhost' || !host) ? '127.0.0.1' : host,
+            port: isNaN(port) ? 6379 : port,
             maxRetriesPerRequest: null,
-            family: 4, // Force IPv4 to avoid ::1 issues on Windows
           },
         };
       },

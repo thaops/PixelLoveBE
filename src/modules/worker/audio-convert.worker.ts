@@ -7,7 +7,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import { Track, TrackDocument } from '../tracks/schemas/track.schema';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { v2 as cloudinary } from 'cloudinary';
 import { EventsGateway } from '../events/events.gateway';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -24,7 +24,6 @@ import axios from 'axios';
 @Injectable()
 export class AudioConvertWorker extends WorkerHost {
     private readonly logger = new Logger(AudioConvertWorker.name);
-    private s3Client: S3Client;
 
     constructor(
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
@@ -33,14 +32,12 @@ export class AudioConvertWorker extends WorkerHost {
         private readonly youtubeService: YoutubeService,
     ) {
         super();
-        this.logger.log('💿 Audio Convert Worker Initialized (Y2Mate Mode)');
+        this.logger.log('💿 Audio Convert Worker Initialized (Y2Mate Cloudinary Mode)');
 
-        this.s3Client = new S3Client({
-            region: this.configService.get<string>('AWS_REGION') || 'ap-southeast-1',
-            credentials: {
-                accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID') || '',
-                secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY') || '',
-            },
+        cloudinary.config({
+            cloud_name: this.configService.get<string>('CLOUDINARY_CLOUD_NAME'),
+            api_key: this.configService.get<string>('CLOUDINARY_API_KEY'),
+            api_secret: this.configService.get<string>('CLOUDINARY_API_SECRET'),
         });
     }
 
@@ -52,48 +49,48 @@ export class AudioConvertWorker extends WorkerHost {
         });
     }
 
-    private async uploadToS3(filePath: string, videoId: string): Promise<string> {
-        const bucket = this.configService.get<string>('AWS_S3_BUCKET_NAME');
-        const region = this.configService.get<string>('AWS_REGION') || 'ap-southeast-1';
-        const fileStream = fs.createReadStream(filePath);
-
-        const command = new PutObjectCommand({
-            Bucket: bucket,
-            Key: `youtube_tracks/${videoId}.mp3`,
-            Body: fileStream,
-            ContentType: 'audio/mpeg',
-            ACL: 'public-read' // Cấp file public
+    private async uploadToCloudinary(filePath: string, videoId: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            cloudinary.uploader.upload(filePath, {
+                resource_type: 'video',
+                folder: 'youtube_tracks',
+                public_id: videoId,
+                overwrite: true,
+            }, (error, result) => {
+                if (error) return reject(error);
+                if (!result) return reject(new Error('Cloudinary upload result is undefined'));
+                resolve(result.secure_url);
+            });
         });
-
-        await this.s3Client.send(command);
-        return `https://${bucket}.s3.${region}.amazonaws.com/youtube_tracks/${videoId}.mp3`;
     }
 
     private async downloadFromUrl(url: string, destPath: string) {
+        const writer = fs.createWriteStream(destPath);
         const response = await axios({
-            method: 'get',
-            url: url,
+            url,
+            method: 'GET',
             responseType: 'stream',
             headers: {
+                'accept': '*/*',
+                'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
                 'origin': 'https://v1.y2mate.nu',
                 'referer': 'https://v1.y2mate.nu/',
-                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+                // Không dùng br để tránh lỗi stream thô nếu không giải nén đúng
+                'accept-encoding': 'gzip, deflate',
             }
         });
-        const writer = fs.createWriteStream(destPath);
+
         response.data.pipe(writer);
+
         return new Promise((resolve, reject) => {
             writer.on('finish', () => resolve(true));
-            writer.on('error', (err) => reject(err));
+            writer.on('error', reject);
         });
     }
 
-    private async getMetadata(youtubeUrl: string, cookiesPath?: string) {
-        let cmd = `yt-dlp --dump-json --no-playlist ${youtubeUrl}`;
-        if (cookiesPath && fs.existsSync(cookiesPath)) {
-            cmd = `yt-dlp --cookies "${cookiesPath}" --dump-json --no-playlist ${youtubeUrl}`;
-        }
-
+    private async getMetadata(youtubeUrl: string) {
+        const cmd = `yt-dlp --dump-json --no-playlist ${youtubeUrl}`;
         const { stdout } = await execPromise(cmd);
         const data = JSON.parse(stdout);
         return {
@@ -109,9 +106,9 @@ export class AudioConvertWorker extends WorkerHost {
             return;
         }
 
-        const { trackId, youtubeUrl, roomId, youtubeVideoId } = job.data;
+        const { youtubeUrl, youtubeVideoId } = job.data;
         const videoId = youtubeVideoId;
-        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (Y2Mate S3 Mode)`);
+        this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (Y2Mate Cloudinary Mode)`);
 
         try {
             const existing = await this.trackModel.findOne({
@@ -158,11 +155,9 @@ export class AudioConvertWorker extends WorkerHost {
 
             await notifyAllWaiting(10, 'Đang trích xuất metadata...');
 
-            // Lấy Metadata (vẫn dùng yt-dlp vì cần duration)
             let title = '';
             let duration = 0;
             let thumbnail = '';
-            const cookiesPath = path.join(process.cwd(), 'configs', 'cookies.txt');
 
             try {
                 const meta = await this.getMetadata(youtubeUrl);
@@ -171,17 +166,28 @@ export class AudioConvertWorker extends WorkerHost {
                 thumbnail = meta.thumbnail;
             } catch (err) {
                 this.logger.warn(`Lấy info metadata lỗi: ${err.message}`);
-                // Metadata failure is not fatal if we can get it from Y2Mate later
             }
 
-            await notifyAllWaiting(30, 'Đang lấy link tải từ Y2Mate...');
+            await notifyAllWaiting(25, 'Đang chuẩn bị dịch vụ chuyển đổi...');
 
-            // Gọi YoutubeService để lấy link MP3 từ Y2Mate
-            const y2mateInfo = await this.youtubeService.convertToMp3(videoId);
-            if (!title) title = y2mateInfo.title;
-            const downloadUrl = y2mateInfo.downloadUrl;
+            let result;
+            try {
+                // skipCache=true: Luôn lấy link mới ngay lúc tải để không bị 404
+                result = await this.youtubeService.convertToMp3(videoId, true);
+            } catch (err) {
+                this.logger.error(`❌ Y2Mate Convert Error: ${err.message}`);
+                throw new Error(`Dịch vụ Y2Mate gặp lỗi: ${err.message}`);
+            }
 
-            await notifyAllWaiting(50, 'Đang tải audio từ Y2Mate...');
+            const downloadUrl = result.downloadURL;
+            if (!title) title = result.title;
+
+            if (!downloadUrl) {
+                this.logger.error(`❌ Result object is missing downloadUrl property: ${JSON.stringify(result)}`);
+                throw new Error('Y2Mate did not return a download URL');
+            }
+
+            await notifyAllWaiting(45, 'Đang tải nhạc từ server...');
 
             const tempDir = path.join(os.tmpdir(), 'youtube');
             if (!fs.existsSync(tempDir)) {
@@ -191,8 +197,8 @@ export class AudioConvertWorker extends WorkerHost {
             const tempFilePath = path.join(tempDir, `${videoId}.mp3`);
             if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
 
-            // Tải file từ Y2Mate
             try {
+                this.logger.log(`📥 Starting download: ${title}`);
                 await this.downloadFromUrl(downloadUrl, tempFilePath);
             } catch (downloadError) {
                 this.logger.error(`❌ Download from Y2Mate failed: ${downloadError.message}`);
@@ -203,18 +209,22 @@ export class AudioConvertWorker extends WorkerHost {
                 throw new Error('Local file not found after download from Y2Mate');
             }
 
-            await notifyAllWaiting(80, 'Đang lưu trữ lên hệ thống...');
+            await notifyAllWaiting(80, 'Đang lưu trữ lên Cloudinary...');
 
             let finalAudioUrl = '';
             try {
-                finalAudioUrl = await this.uploadToS3(tempFilePath, videoId);
-                this.logger.log(`☁️ Uploaded to S3: ${finalAudioUrl}`);
+                finalAudioUrl = await this.uploadToCloudinary(tempFilePath, videoId);
+                this.logger.log(`☁️ Uploaded to Cloudinary: ${finalAudioUrl}`);
             } catch (uploadError) {
-                this.logger.error(`❌ Upload S3 failed: ${uploadError.message}`);
+                this.logger.error(`❌ Upload Cloudinary failed: ${uploadError.message}`);
                 throw uploadError;
+            } finally {
+                if (fs.existsSync(tempFilePath)) {
+                    fs.unlinkSync(tempFilePath);
+                    this.logger.debug('🗑️ Cleaned up temp file');
+                }
             }
 
-            // Update Database for ALL processing tracks
             const updatedResult = await this.trackModel.updateMany(
                 { youtubeVideoId: videoId, status: 'processing' },
                 {
@@ -251,7 +261,7 @@ export class AudioConvertWorker extends WorkerHost {
         } catch (error) {
             this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
             await this.trackModel.updateMany(
-                { youtubeVideoId: job.data.youtubeVideoId || videoId, status: 'processing' },
+                { youtubeVideoId: videoId, status: 'processing' },
                 { status: 'failed' }
             );
             throw error;

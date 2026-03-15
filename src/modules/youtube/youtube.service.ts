@@ -12,15 +12,34 @@ export class YoutubeService implements OnModuleInit, OnModuleDestroy {
 
     onModuleInit() {
         const redisUrl = this.configService.get<string>('REDIS_URL');
+        const redisOptions = {
+            maxRetriesPerRequest: 1,
+            connectTimeout: 2000,
+            retryStrategy: (times: number) => {
+                if (times > 3) {
+                    this.logger.warn('Redis reconnection stopped after 3 attempts.');
+                    return null; // Stop retrying
+                }
+                return 5000; // Retry after 5s
+            },
+            enableOfflineQueue: false, // Fail immediately if not connected
+        };
+
         if (redisUrl) {
-            this.redis = new Redis(redisUrl);
+            this.redis = new Redis(redisUrl, redisOptions);
         } else {
             this.redis = new Redis({
                 host: this.configService.get<string>('REDIS_HOST', '127.0.0.1'),
                 port: this.configService.get<number>('REDIS_PORT', 6379),
                 family: 4,
+                ...redisOptions,
             });
         }
+
+        this.redis.on('error', (err) => {
+            // Log once, then ioredis will stop due to retryStrategy returning null
+            this.logger.warn(`Redis connection error: ${err.message}`);
+        });
     }
 
     onModuleDestroy() {
@@ -67,16 +86,18 @@ export class YoutubeService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    async convertToMp3(videoId: string) {
+    async convertToMp3(videoId: string, skipCache: boolean = false) {
         const cacheKey = `yt:mp3:${videoId}`;
 
-        try {
-            const cached = await this.redis.get(cacheKey);
-            if (cached) {
-                return JSON.parse(cached);
+        if (!skipCache) {
+            try {
+                const cached = await this.redis.get(cacheKey);
+                if (cached) {
+                    return JSON.parse(cached);
+                }
+            } catch (e) {
+                this.logger.error(`Redis error: ${e.message}`);
             }
-        } catch (e) {
-            this.logger.error(`Redis error: ${e.message}`);
         }
 
         const t = Math.floor(Date.now() / 1000);
@@ -135,16 +156,14 @@ export class YoutubeService implements OnModuleInit, OnModuleDestroy {
 
             const result = {
                 title: data.title,
-                downloadUrl: data.downloadURL,
+                downloadURL: data.downloadURL, // Đồng bộ tên biến downloadURL
                 provider: 'y2mate',
             };
 
-            // STEP 4: Cache
+            // Cache kết quả convert trong 10 phút
             try {
-                await this.redis.set(cacheKey, JSON.stringify(result), 'EX', 7200);
-            } catch (e) {
-                this.logger.error(`Failed to cache result: ${e.message}`);
-            }
+                await this.redis.set(cacheKey, JSON.stringify(result), 'EX', 600);
+            } catch (e) { }
 
             return result;
         } catch (error) {
