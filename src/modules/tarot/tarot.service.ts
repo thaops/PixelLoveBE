@@ -120,7 +120,7 @@ export class TarotService {
 
         await tarot.save();
 
-        this.eventsGateway.emitToCoupleRoom(user.coupleRoomId, bothSelected ? 'tarotReady' : 'tarotSelected', {
+        await this.eventsGateway.emitToCoupleRoom(user.coupleRoomId, bothSelected ? 'tarotReady' : 'tarotSelected', {
             by: user._id.toString()
         });
 
@@ -240,7 +240,7 @@ export class TarotService {
             streak: streakStatus.days
         };
 
-        this.eventsGateway.emitToCoupleRoom(user.coupleRoomId, 'tarotReveal', result);
+        await this.eventsGateway.emitToCoupleRoom(user.coupleRoomId, 'tarotReveal', result);
 
         return result;
     }
