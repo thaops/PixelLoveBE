@@ -1,8 +1,8 @@
 // @ts-ignore
-import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
 // @ts-ignore
-import { Job, Worker } from 'bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { Job, Worker, Queue } from 'bullmq';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
@@ -22,19 +22,29 @@ import axios from 'axios';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
 
+console.log("🔥 WORKER FILE LOADED AT RUNTIME");
+
 ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 @Processor('audio-convert', { concurrency: 3 })
 @Injectable()
-export class AudioConvertWorker extends WorkerHost {
+export class AudioConvertWorker extends WorkerHost implements OnModuleInit {
     private readonly logger = new Logger(AudioConvertWorker.name);
 
-    onModuleInit() {
+    async onModuleInit() {
         const isWorker = this.configService.get<string>('IS_WORKER');
-        const redisHost = this.configService.get<string>('REDIS_HOST');
         this.logger.log(`👷 WORKER MODULE BOOTING...`);
-        this.logger.log(`📊 Mode: ${isWorker === 'true' ? 'ACTIVE WORKER' : 'API ONLY'}`);
-        this.logger.log(`🔗 Target Redis Host: ${redisHost || 'Using REDIS_URL'}`);
+        this.logger.log(`📊 Mode: ${isWorker === 'true' ? 'ACTIVE WORKER' : 'SINGLE SERVICE MODE'}`);
+        
+        // Kiểm tra kết nối Redis thực tế
+        try {
+            const client = await this.audioQueue.client;
+            const status = await client.ping();
+            this.logger.log(`✅ REDIS CONNECTIVITY CHECK: ${status === 'PONG' ? 'SUCCESSFUL (PONG)' : 'FAILED'}`);
+        } catch (err) {
+            this.logger.error(`❌ REDIS CONNECTIVITY CHECK FAILED: ${err.message}`);
+            this.logger.error(`👉 Make sure you ATTACHED the Redis instance in Render's "Connections" tab.`);
+        }
     }
 
     // Lắng nghe sự kiện Job bắt đầu chạy
@@ -55,11 +65,13 @@ export class AudioConvertWorker extends WorkerHost {
 
     constructor(
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
+        @InjectQueue('audio-convert') private readonly audioQueue: Queue,
         private configService: ConfigService,
         private readonly eventsGateway: EventsGateway,
         private readonly youtubeService: YoutubeService,
     ) {
         super();
+        console.log("🚀 AUDIO CONVERT WORKER CONSTRUCTOR CALLED");
         this.logger.log('💿 Audio Convert Worker Initialized (Y2Mate Cloudinary Mode)');
 
         cloudinary.config({
@@ -142,11 +154,7 @@ export class AudioConvertWorker extends WorkerHost {
     }
 
     async process(job: Job<any, any, string>): Promise<any> {
-        if (this.configService.get<string>('IS_WORKER') !== 'true') {
-            this.logger.warn(`⚠️ Skipped job ${job.id} - This instance is NOT configured as a Worker (IS_WORKER != true)`);
-            return;
-        }
-
+        this.logger.log('🚀 WORKER PROCESS FUNCTION CALLED');
         const { youtubeUrl, youtubeVideoId } = job.data;
         const videoId = youtubeVideoId;
         this.logger.log(`🔄 Processing job ${job.id} for video ${videoId} (Y2Mate Cloudinary Mode)`);

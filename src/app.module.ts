@@ -58,19 +58,39 @@ import { YoutubeModule } from './modules/youtube/youtube.module';
         const port = typeof portValue === 'string' ? parseInt(portValue, 10) : portValue;
 
         if (redisUrl) {
-          return {
-            connection: new Redis(redisUrl, {
-              maxRetriesPerRequest: null,
-            }),
+          const isInternal = redisUrl.includes('red-');
+          const connectionOptions = {
+            maxRetriesPerRequest: null,
+            connectTimeout: 10000,
+            // Nếu là Render Internal Redis, ép dùng IPv4 để tránh lỗi resolve DNS
+            family: isInternal ? 4 : undefined,
           };
+
+          const redis = new Redis(redisUrl, connectionOptions);
+          
+          redis.on('connect', () => console.log('✅ Connected to Render Redis successfully'));
+          redis.on('error', (err) => {
+            console.error(`❌ Redis Connection Error: ${err.message}`);
+            if (err.message.includes('ENOTFOUND')) {
+                console.error('👉 Hint: Check if Redis is ATTACHED in Render Connections tab.');
+            }
+          });
+
+          return { connection: redis };
         }
 
+        const redisOptions = {
+          host: (host === 'localhost' || !host) ? '127.0.0.1' : host,
+          port: isNaN(port) ? 6379 : port,
+          maxRetriesPerRequest: null,
+        };
+        const redis = new Redis(redisOptions);
+        redis.on('error', (err) => {
+          console.error(`❌ Redis Connection Error (Host/Port): ${err.message}`);
+        });
+
         return {
-          connection: {
-            host: (host === 'localhost' || !host) ? '127.0.0.1' : host,
-            port: isNaN(port) ? 6379 : port,
-            maxRetriesPerRequest: null,
-          },
+          connection: redis,
         };
       },
     }),
