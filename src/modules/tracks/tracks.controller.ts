@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, ParamData, UseGuards, Req, Delete, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { TracksService } from './tracks.service';
 import { AddTrackDto } from './dto/add-track.dto';
 import { AddExistingTrackDto } from './dto/add-existing-track.dto';
@@ -13,14 +13,16 @@ export class TracksController {
 
     @UseGuards(JwtAuthGuard)
     @Get('/tracks/library')
-    @ApiOperation({ summary: 'Lấy danh sách các bài hát có sẵn trong hệ thống (có phân trang)' })
-    @ApiParam({ name: 'page', required: false, description: 'Số trang (mặc định 1)' })
-    @ApiParam({ name: 'limit', required: false, description: 'Số lượng bài mỗi trang (mặc định 20)' })
+    @ApiOperation({ summary: 'Lấy danh sách các bài hát có sẵn trong hệ thống (có phân trang & tìm kiếm)' })
+    @ApiQuery({ name: 'page', required: false, description: 'Số trang (mặc định 1)' })
+    @ApiQuery({ name: 'limit', required: false, description: 'Số lượng bài mỗi trang (mặc định 20)' })
+    @ApiQuery({ name: 'search', required: false, description: 'Từ khóa tìm kiếm theo tên bài hát' })
     async getLibrary(
         @Query('page') page: string,
-        @Query('limit') limit: string
+        @Query('limit') limit: string,
+        @Query('search') search: string
     ) {
-        return this.tracksService.getLibrary(Number(page) || 1, Number(limit) || 20);
+        return this.tracksService.getLibrary(Number(page) || 1, Number(limit) || 20, search);
     }
 
     @UseGuards(JwtAuthGuard)

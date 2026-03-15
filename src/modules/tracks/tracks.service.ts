@@ -27,11 +27,16 @@ export class TracksService {
         });
     }
 
-    async getLibrary(page = 1, limit = 20) {
+    async getLibrary(page = 1, limit = 20, search?: string) {
         const skip = (page - 1) * limit;
         
+        const matchStage: any = { status: 'ready' };
+        if (search) {
+            matchStage.title = { $regex: search, $options: 'i' };
+        }
+
         const library = await this.trackModel.aggregate([
-            { $match: { status: 'ready' } },
+            { $match: matchStage },
             { $sort: { createdAt: -1 } },
             {
                 $group: {
@@ -51,7 +56,7 @@ export class TracksService {
             { $project: { _id: '$originalId', youtubeVideoId: 1, title: 1, thumbnail: 1, duration: 1, audioUrl: 1 } }
         ]);
 
-        const total = await this.trackModel.countDocuments({ status: 'ready' });
+        const total = await this.trackModel.countDocuments(matchStage);
 
         return {
             data: library,
