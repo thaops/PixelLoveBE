@@ -38,11 +38,14 @@ export class Track {
 
     @Prop({ type: Types.ObjectId, required: true, ref: 'User' })
     addedBy: Types.ObjectId;
+
+    @Prop({ default: false })
+    removedFromRoom: boolean;
 }
 
 export const TrackSchema = SchemaFactory.createForClass(Track);
 
 // Indexes
 TrackSchema.index({ youtubeVideoId: 1 });
-TrackSchema.index({ roomId: 1, status: 1 });
+TrackSchema.index({ roomId: 1, status: 1, removedFromRoom: 1 });
 TrackSchema.index({ createdAt: -1 });

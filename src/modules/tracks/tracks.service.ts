@@ -237,8 +237,8 @@ export class TracksService {
             throw new ForbiddenException('You do not have permission to delete this track');
         }
 
-        // 1. Delete from DB
-        await this.trackModel.findByIdAndDelete(trackId);
+        // 1. Mark as removed from room (Soft delete to keep in Library)
+        await this.trackModel.findByIdAndUpdate(trackId, { $set: { removedFromRoom: true } });
 
         // 2. Emit update & skip track logic 
         this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {

@@ -49,6 +49,7 @@ export class PlayerService {
         const queue = await this.trackModel.find({
             roomId: new Types.ObjectId(roomId),
             status: { $in: ['ready', 'processing'] },
+            removedFromRoom: { $ne: true },
         })
             .sort({ createdAt: 1 })
             .limit(5) // Chỉ lấy 5 bài để tối ưu state
@@ -92,6 +93,7 @@ export class PlayerService {
         const query: any = {
             roomId: new Types.ObjectId(roomId),
             status: { $in: ['ready', 'processing'] },
+            removedFromRoom: { $ne: true },
         };
 
         if (search) {
@@ -204,6 +206,7 @@ export class PlayerService {
         let query: any = {
             roomId: new Types.ObjectId(roomId),
             status: 'ready',
+            removedFromRoom: { $ne: true },
         };
 
         if (currentTrackId) {
@@ -220,6 +223,7 @@ export class PlayerService {
             nextTrack = await this.trackModel.findOne({
                 roomId: new Types.ObjectId(roomId),
                 status: 'ready',
+                removedFromRoom: { $ne: true },
             }).sort({ createdAt: 1 });
         }
 
@@ -252,6 +256,7 @@ export class PlayerService {
         let query: any = {
             roomId: new Types.ObjectId(roomId),
             status: 'ready',
+            removedFromRoom: { $ne: true },
         };
 
         if (currentTrackId) {
@@ -269,6 +274,7 @@ export class PlayerService {
             prevTrack = await this.trackModel.findOne({
                 roomId: new Types.ObjectId(roomId),
                 status: 'ready',
+                removedFromRoom: { $ne: true },
             }).sort({ createdAt: -1 });
         }
 

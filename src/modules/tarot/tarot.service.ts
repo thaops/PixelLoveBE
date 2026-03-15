@@ -207,6 +207,10 @@ export class TarotService {
 
         const streakStatus = await this.streakService.getStreak(user.coupleRoomId);
 
+        if (tarot.aiGenerating) {
+            throw new BadRequestException('AI đang giải mã thông điệp tình yêu của hai bạn. Vui lòng chờ trong giây lát...');
+        }
+
         // Fallback logic if AI is not ready or failed
         if (!tarot.aiGenerated) {
             if (!tarot.resultMessage) {
@@ -216,7 +220,7 @@ export class TarotService {
                 tarot.resultAdvice = fallback.advice;
                 tarot.resultQuestion = fallback.question;
             }
-            tarot.aiGenerated = true;
+            tarot.aiGenerated = true; // Use fallback as final result if AI failed after generating finished
         }
 
         if (!tarot.revealedAt) {

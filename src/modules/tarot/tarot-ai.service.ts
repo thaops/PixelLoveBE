@@ -21,74 +21,84 @@ export class TarotAiService {
 
     private readonly ARCHETYPES = [
         { 
-            name: 'Sự Kết Nối', 
+            name: 'Sự Kết Nối (The Lovers)', 
             energy: 'Connection', 
-            meaning: 'Sự đồng điệu và gắn kết linh hồn', 
-            advice: 'Hãy dành thời gian chất lượng bên nhau',
-            themes: ['sự hiện diện trọn vẹn', 'kỷ niệm cũ', 'thấu hiểu thầm lặng', 'sức mạnh của cái nắm tay']
+            meaning: 'Sự hòa quyện giữa lý trí và con tim, sự lựa chọn đồng hành cùng nhau', 
+            advice: 'Hãy trân trọng những giá trị chung mà hai bạn đang cùng hướng tới',
+            themes: ['sự thấu cảm vượt ngôn từ', 'lựa chọn từ trái tim', 'sự bù trừ hoàn hảo', 'ngọn lửa đam mê âm ỉ'],
+            symbols: ['đôi chim bồ câu', 'sợi dây đỏ', 'ánh sáng bình minh']
         },
         { 
-            name: 'Sự Tin Tưởng', 
+            name: 'Sự Tin Tưởng (The Emperor)', 
             energy: 'Trust', 
-            meaning: 'Niềm tin và sự an tâm tuyệt đối', 
-            advice: 'Hãy buông bỏ những nghi ngờ không đáng có',
-            themes: ['sự an toàn cảm xúc', 'buông bỏ quá khứ', 'xây dựng tương lai', 'điểm tựa tinh thần']
+            meaning: 'Sự bảo hộ, tính kỷ luật và cam kết lâu bền', 
+            advice: 'Hãy xây dựng niềm tin dựa trên những hành động thực tế',
+            themes: ['điểm tựa vững chãi', 'lời cam kết vàng', 'vượt qua những nghi ngại', 'xây dựng tương lai chung'],
+            symbols: ['ngai vàng', 'ngọn núi cao', 'chiếc khiên bạc']
         },
         { 
-            name: 'Sự Tươi Mới', 
+            name: 'Sự Tươi Mới (The Fool)', 
             energy: 'Refresh', 
-            meaning: 'Năng lượng mới mẻ cho mối quan hệ', 
-            advice: 'Hãy thử cùng nhau làm điều gì đó mới',
-            themes: ['trải nghiệm chưa từng có', 'góc nhìn mới', 'bản giao hưởng lạ', 'phá vỡ thói quen']
+            meaning: 'Sự khởi đầu mới, tinh thần lạc quan và không sợ hãi', 
+            advice: 'Đừng ngại cùng nhau thử những điều mới mẻ',
+            themes: ['bước nhảy niềm tin', 'sự hồn nhiên trong tình yêu', 'khám phá những vùng đất mới', 'phá bỏ rào cản'],
+            symbols: ['hành lý nhỏ', 'vách đá', 'ánh mặt trời rực rỡ']
         },
         { 
-            name: 'Sự Phát Triển', 
+            name: 'Sự Phát Triển (The Empress)', 
             energy: 'Growth', 
-            meaning: 'Cùng nhau học hỏi và lớn lên', 
-            advice: 'Hãy ủng hộ những mục tiêu cá nhân của nhau',
-            themes: ['nuôi dưỡng đam mê', 'vượt qua thử thách', 'tương lai chung', 'sự thay đổi tích cực']
+            meaning: 'Sự nuôi dưỡng, sinh sôi và tình yêu mẫu tử ấm áp', 
+            advice: 'Hãy để tình yêu của hai bạn được phát triển một cách tự nhiên nhất',
+            themes: ['sự màu mỡ của cảm xúc', 'nuôi dưỡng tâm hồn nhau', 'thời điểm nở hoa của tình yêu', 'sự trù phú và sung túc'],
+            symbols: ['cánh đồng lúa chín', 'vòng hoa', 'dòng suối trong']
         },
         { 
-            name: 'Sự Hòa Hợp', 
+            name: 'Sự Hòa Hợp (Temperance)', 
             energy: 'Harmony', 
-            meaning: 'Sự cân bằng và hòa quyện cảm xúc', 
-            advice: 'Hãy duy trì sự nhẹ nhàng trong cách đối xử',
-            themes: ['vũ điệu cảm xúc', 'nhịp điệu chung', 'sự bù trừ hoàn hảo', 'yên bình bên nhau']
+            meaning: 'Sự kiên nhẫn, trung dung và pha trộn các yếu tố để tạo ra sự cân bằng', 
+            advice: 'Hãy tìm điểm giao thoa giữa cái tôi cá nhân và chúng ta',
+            themes: ['nghệ thuật hòa giải', 'nhịp điệu dịu dàng', 'sự kiên nhẫn ngọt ngào', 'chữa lành bằng tình yêu'],
+            symbols: ['hai chiếc cốc', 'nước chảy', 'đôi cánh trắng']
         },
         { 
-            name: 'Sự Phản Chiếu', 
+            name: 'Sự Phản Chiếu (The High Priestess)', 
             energy: 'Reflection', 
-            meaning: 'Nhìn lại hành trình đã qua', 
-            advice: 'Hãy cùng chia sẻ về những kỷ niệm đẹp',
-            themes: ['gương soi tâm hồn', 'bài học từ quá khứ', 'sự thay đổi của tình yêu', 'trân trọng hiện tại']
+            meaning: 'Sự huyền bí, trực giác và kiến thức ẩn giấu', 
+            advice: 'Hãy lắng nghe tiếng nói bên trong của mình về mối quan hệ này',
+            themes: ['trực giác thầm lặng', 'nhìn thấu tâm hồn', 'bí mật của sự gắn kết', 'sự kết nối tâm linh'],
+            symbols: ['mặt trăng', 'cuộn giấy', 'màn che huyền bí']
         },
         { 
-            name: 'Sự Phiêu Lưu', 
+            name: 'Sự Phiêu Lưu (The Chariot)', 
             energy: 'Adventure', 
-            meaning: 'Khám phá những trải nghiệm mới', 
-            advice: 'Lên kế hoạch cho một chuyến đi bất ngờ',
-            themes: ['hành trình xa xôi', 'khám phá nội tâm', 'thử thách mạo hiểm', 'niềm vui bất tận']
+            meaning: 'Sự chiến thắng, quyết tâm và làm chủ hướng đi', 
+            advice: 'Hãy cùng nhau tiến về phía trước với mục tiêu chung rõ ràng',
+            themes: ['hành trình chinh phục', 'vượt qua các xung đột', 'sự đồng lòng hướng về mục tiêu', 'đam mê dẫn lối'],
+            symbols: ['xe kéo', 'ngôi sao dẫn đường', 'đôi nhân sư']
         },
         { 
-            name: 'Sự Kiên Nhẫn', 
+            name: 'Sự Kiên Nhẫn (Strength)', 
             energy: 'Patience', 
-            meaning: 'Thấu hiểu và chờ đợi nhau', 
-            advice: 'Đừng vội vã trong những quyết định chung',
-            themes: ['thời điểm vàng', 'sự dịu dàng', 'lắng nghe sâu sắc', 'nuôi dưỡng từ từ']
+            meaning: 'Sức mạnh nội tâm, lòng dũng cảm và sự dịu dàng khuất phục cái ác', 
+            advice: 'Hãy dùng sự dịu dàng để hóa giải những mâu thuẫn',
+            themes: ['sức mạnh của sự mềm mỏng', 'làm chủ cảm xúc', 'lòng trắc ẩn', 'sự kiên định âm thầm'],
+            symbols: ['sư tử', 'vô cực', 'đóa hoa hồng']
         },
         { 
-            name: 'Sự Cân Bằng', 
+            name: 'Sự Cân Bằng (Justice)', 
             energy: 'Balance', 
-            meaning: 'Công bằng trong cho và nhận', 
-            advice: 'Hãy chú ý đến cảm xúc của đối phương nhiều hơn',
-            themes: ['cán cân cảm xúc', 'trách nhiệm chung', 'thời gian cho mình và cho nhau', 'sự cho đi vô điều kiện']
+            meaning: 'Sự công bằng, sự thật và nhân quả', 
+            advice: 'Hãy trung thực với nhau và với chính cảm xúc của mình',
+            themes: ['trách nhiệm chung', 'sự rõ ràng trong giao tiếp', 'cân bằng giữa cho và nhận', 'sự thật được phơi bày'],
+            symbols: ['cái cân', 'thanh kiếm', 'trụ cột đá']
         },
         { 
-            name: 'Sự Giao Thoa', 
+            name: 'Sự Giao Thoa (The Magician)', 
             energy: 'Communication', 
-            meaning: 'Giao tiếp chân thành và cởi mở', 
-            advice: 'Nói ra những điều thầm kín trong lòng',
-            themes: ['ngôn ngữ trái tim', 'phá vỡ im lặng', 'sự thấu cảm', 'lời thì thầm ngọt ngào']
+            meaning: 'Khả năng hiện thực hóa, giao tiếp và kỹ năng', 
+            advice: 'Hãy sử dụng sức mạnh của ngôn từ để truyền cảm hứng cho nhau',
+            themes: ['ngôn ngữ của đam mê', 'kiến tạo hiện thực mới', 'biến ý tưởng thành hành động', 'sự thấu hiểu đa chiều'],
+            symbols: ['bốn nguyên tố', 'chiếc gậy thần', 'biểu tượng vô cực']
         }
     ];
 
@@ -123,7 +133,14 @@ export class TarotAiService {
         }
 
         try {
-            const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+            const model = this.genAI.getGenerativeModel({ 
+                model: 'gemini-2.5-flash',
+                generationConfig: {
+                    temperature: 1.0,
+                    topP: 0.95,
+                    maxOutputTokens: 1024,
+                }
+            });
 
             const archetype = this.getArchetype(coupleId, date);
 
@@ -164,19 +181,21 @@ Advice: Hãy thả lỏng những nghi ngờ không cần thiết và tin vào c
 Question: Điều gì ở người ấy khiến bạn cảm thấy an tâm nhất?`;
 
             const userPrompt = `Input Data:
-Energy Archetype: ${archetype.name} (${archetype.meaning})
-Specific Micro-theme: ${archetype.activeTheme}
+Energy Archetype: ${archetype.name}
+Core Meaning: ${archetype.meaning}
+Active Theme to focus: ${archetype.activeTheme}
+Visual Symbols to weave in: ${archetype.symbols?.join(', ')}
 Recommended Base Advice: ${archetype.advice}
 Couple Names: ${context.names.join(' & ')}
 Current Streak: ${context.streak} days
 Together for: ${context.togetherDays} days
-Who picked card first today: ${context.pickedFirst}
+Whose turn it was to lead: ${context.pickedFirst}
 
-Task: Generate the 4-2-1 structure interpretation focusing deeply on the "Specific Micro-theme". Ensure the tone is warm and personalized.`;
+Task: Generate a UNIQUE 4-2-1 structure interpretation. Focus deeply on the "Active Theme" and weave in the "Visual Symbols" to avoid clichés. Ensure the tone is warm, professional, and slightly mystical. Use diverse vocabulary to avoid repeating common phrases.`;
 
             const result = await Promise.race([
                 model.generateContent(`${systemPrompt}\n\nInput:\n${userPrompt}`),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
             ]) as any;
 
             const response = await result.response;
@@ -202,9 +221,9 @@ Task: Generate the 4-2-1 structure interpretation focusing deeply on the "Specif
         const arch = this.getArchetype(coupleId, date);
         
         const fallbackMessages = [
-          "Mối quan hệ của bạn đang ở trạng thái ổn định và đầy ấm áp.",
-          "Hôm nay là thời điểm tuyệt vời để thấu hiểu nhau sâu sắc hơn.",
-          "Sự hiện diện của đối phương chính là món quà lớn nhất lúc này."
+          "Năng lượng hôm nay cho thấy mối quan hệ của bạn đang ở trạng thái ổn định và đầy ấm áp. Đây là lúc cả hai cùng trân trọng những khoảnh khắc bình dị bên nhau để thấu hiểu nhau hơn. Mọi thứ đang diễn ra rất nhẹ nhàng và thuận lợi cho những dự định chung sắp tới. Hãy cứ tin tưởng vào hành trình mà hai bạn đang cùng nhau xây dựng mỗi ngày.",
+          "Lá bài hôm nay mang đến thông điệp về sự đồng điệu sâu sắc trong tâm hồn của cả hai. Có những điều không cần nói ra nhưng đối phương vẫn có thể thấu cảm và sẻ chia một cách trọn vẹn. Sự gắn kết này chính là nền tảng vững chắc nhất để tình yêu của bạn vượt qua mọi thử thách. Hãy tận hưởng nguồn năng lượng tích cực này để làm mới tình cảm của mình.",
+          "Thông điệp từ lá bài cho thấy sự hiện diện của đối phương chính là món quà lớn nhất lúc này. Hai bạn đang tạo ra một không gian an toàn và đầy yêu thương để cùng nhau phát triển. Đừng ngần ngại bày tỏ những tình cảm chân thành nhất dành cho người ấy vào ngày hôm nay. Sự chân thành sẽ luôn tìm được đường đến với trái tim của người mà bạn yêu thương."
         ];
         
         const fallbackQuestions = [
@@ -216,7 +235,7 @@ Task: Generate the 4-2-1 structure interpretation focusing deeply on the "Specif
         return {
             energy: arch.name,
             message: fallbackMessages[(cardA + cardB) % fallbackMessages.length],
-            advice: arch.advice,
+            advice: `${arch.advice}. Hãy luôn trân trọng những gì mình đang có.`,
             question: fallbackQuestions[(cardA + cardB) % fallbackQuestions.length]
         };
     }
