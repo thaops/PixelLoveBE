@@ -27,6 +27,76 @@ export class TracksService {
         });
     }
 
+    async getLibrary(page = 1, limit = 20) {
+        const skip = (page - 1) * limit;
+        
+        const library = await this.trackModel.aggregate([
+            { $match: { status: 'ready' } },
+            { $sort: { createdAt: -1 } },
+            {
+                $group: {
+                    _id: '$youtubeVideoId',
+                    originalId: { $first: '$_id' },
+                    title: { $first: '$title' },
+                    thumbnail: { $first: '$thumbnail' },
+                    duration: { $first: '$duration' },
+                    audioUrl: { $first: '$audioUrl' },
+                    youtubeVideoId: { $first: '$youtubeVideoId' },
+                    createdAt: { $first: '$createdAt' }
+                }
+            },
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+            { $project: { _id: '$originalId', youtubeVideoId: 1, title: 1, thumbnail: 1, duration: 1, audioUrl: 1 } }
+        ]);
+
+        const total = await this.trackModel.countDocuments({ status: 'ready' });
+
+        return {
+            data: library,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        };
+    }
+
+    async addExistingTrackToRoom(roomId: string, userId: string, trackId: string) {
+        const room = await this.roomModel.findById(roomId);
+        if (!room) throw new NotFoundException('Không tìm thấy phòng');
+
+        const sourceTrack = await this.trackModel.findById(trackId);
+        if (!sourceTrack || sourceTrack.status !== 'ready') {
+            throw new BadRequestException('Bài hát không tồn tại hoặc chưa sẵn sàng');
+        }
+
+        const newTrack = new this.trackModel({
+            roomId: new Types.ObjectId(roomId),
+            youtubeVideoId: sourceTrack.youtubeVideoId,
+            title: sourceTrack.title,
+            thumbnail: sourceTrack.thumbnail,
+            duration: sourceTrack.duration,
+            audioUrl: sourceTrack.audioUrl,
+            status: 'ready',
+            isStreamUrl: sourceTrack.isStreamUrl,
+            addedBy: new Types.ObjectId(userId),
+        });
+
+        const saved = await newTrack.save();
+
+        this.eventsGateway.emitToCoupleRoom(roomId, 'queue:update', {
+            type: 'added',
+            trackId: saved._id.toString(),
+            status: 'ready',
+            track: saved
+        });
+
+        return saved;
+    }
+
 
     async addTrackToRoom(roomId: string, userId: string, addTrackDto: AddTrackDto) {
         const room = await this.roomModel.findById(roomId);

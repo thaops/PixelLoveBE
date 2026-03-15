@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Param, ParamData, UseGuards, Req, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParamData, UseGuards, Req, Delete, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam } from '@nestjs/swagger';
 import { TracksService } from './tracks.service';
 import { AddTrackDto } from './dto/add-track.dto';
+import { AddExistingTrackDto } from './dto/add-existing-track.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 
 @ApiTags('Tracks (Room Audio)')
@@ -9,6 +10,31 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 @Controller('rooms')
 export class TracksController {
     constructor(private readonly tracksService: TracksService) { }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('/tracks/library')
+    @ApiOperation({ summary: 'Lấy danh sách các bài hát có sẵn trong hệ thống (có phân trang)' })
+    @ApiParam({ name: 'page', required: false, description: 'Số trang (mặc định 1)' })
+    @ApiParam({ name: 'limit', required: false, description: 'Số lượng bài mỗi trang (mặc định 20)' })
+    async getLibrary(
+        @Query('page') page: string,
+        @Query('limit') limit: string
+    ) {
+        return this.tracksService.getLibrary(Number(page) || 1, Number(limit) || 20);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('/tracks/library/:trackId')
+    @ApiOperation({ summary: 'Thêm một bài hát từ thư viện vào Room hiện tại' })
+    @ApiParam({ name: 'trackId', description: 'ID của Track trong thư viện' })
+    async addExistingTrack(
+        @Param('trackId') trackId: string,
+        @Req() req: any,
+    ) {
+        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
+        const roomId = req.user.roomId || req.user.coupleRoomId;
+        return this.tracksService.addExistingTrackToRoom(roomId, userId, trackId);
+    }
 
     @UseGuards(JwtAuthGuard)
     @Post('/tracks')
