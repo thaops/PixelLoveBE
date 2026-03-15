@@ -86,22 +86,25 @@ export class PlayerService {
         };
     }
 
-    async getQueue(roomId: string, page = 1, limit = 20) {
+    async getQueue(roomId: string, page = 1, limit = 20, search?: string) {
         const skip = (page - 1) * limit;
 
-        const queue = await this.trackModel.find({
+        const query: any = {
             roomId: new Types.ObjectId(roomId),
             status: { $in: ['ready', 'processing'] },
-        })
+        };
+
+        if (search) {
+            query.title = { $regex: search, $options: 'i' };
+        }
+
+        const queue = await this.trackModel.find(query)
             .sort({ createdAt: 1 })
             .skip(skip)
             .limit(limit)
             .select('title thumbnail duration status audioUrl addedBy createdAt');
 
-        const total = await this.trackModel.countDocuments({
-            roomId: new Types.ObjectId(roomId),
-            status: { $in: ['ready', 'processing'] },
-        });
+        const total = await this.trackModel.countDocuments(query);
 
         return {
             data: queue,

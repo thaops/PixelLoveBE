@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, UseGuards, Req, Query } from '@nestjs/common';
 import { PlayerService } from './player.service';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { PlayTrackDto } from './dto/play-track.dto';
 import { SeekDto } from './dto/seek.dto';
 import { TimerDto } from './dto/timer.dto';
@@ -22,16 +22,18 @@ export class PlayerController {
     }
 
     @Get('queue')
-    @ApiOperation({ summary: 'Lấy danh sách bài hát trong Queue (có phân trang)' })
-    @ApiParam({ name: 'page', required: false, description: 'Trang hiện tại (mặc định 1)' })
-    @ApiParam({ name: 'limit', required: false, description: 'Số bản ghi (mặc định 20)' })
+    @ApiOperation({ summary: 'Lấy danh sách bài hát trong Queue (có phân trang & tìm kiếm)' })
+    @ApiQuery({ name: 'page', required: false, description: 'Trang hiện tại (mặc định 1)' })
+    @ApiQuery({ name: 'limit', required: false, description: 'Số bản ghi mỗi trang (mặc định 20)' })
+    @ApiQuery({ name: 'search', required: false, description: 'Từ khóa tìm kiếm theo tên bài hát' })
     async getQueue(
         @Req() req: any,
         @Query('page') page: string,
-        @Query('limit') limit: string
+        @Query('limit') limit: string,
+        @Query('search') search: string
     ) {
         const roomId = req.user.roomId || req.user.coupleRoomId;
-        return this.playerService.getQueue(roomId, Number(page) || 1, Number(limit) || 20);
+        return this.playerService.getQueue(roomId, Number(page) || 1, Number(limit) || 20, search);
     }
 
     @Post('play')
