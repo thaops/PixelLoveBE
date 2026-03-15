@@ -19,6 +19,10 @@ const execPromise = promisify(exec);
 
 import { YoutubeService } from '../youtube/youtube.service';
 import axios from 'axios';
+import * as ffmpeg from 'fluent-ffmpeg';
+import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
+
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 @Processor('audio-convert', { concurrency: 3 })
 @Injectable()
@@ -98,6 +102,19 @@ export class AudioConvertWorker extends WorkerHost {
             duration: data.duration,
             thumbnail: data.thumbnail
         };
+    }
+
+    private async getAudioDurationFromLocal(filePath: string): Promise<number> {
+        return new Promise((resolve) => {
+            ffmpeg.ffprobe(filePath, (err, metadata) => {
+                if (err) {
+                    this.logger.warn(`FFprobe error: ${err.message}`);
+                    return resolve(0);
+                }
+                const duration = metadata.format.duration || 0;
+                resolve(Math.round(duration));
+            });
+        });
     }
 
     async process(job: Job<any, any, string>): Promise<any> {
@@ -207,6 +224,13 @@ export class AudioConvertWorker extends WorkerHost {
 
             if (!fs.existsSync(tempFilePath)) {
                 throw new Error('Local file not found after download from Y2Mate');
+            }
+
+            // Lấy duration thật từ file vừa tải (Phòng trường hợp yt-dlp lỗi)
+            if (duration === 0) {
+                this.logger.log('📏 Getting duration from file using FFprobe...');
+                duration = await this.getAudioDurationFromLocal(tempFilePath);
+                this.logger.log(`📏 Duration extracted: ${duration}s`);
             }
 
             await notifyAllWaiting(80, 'Đang lưu trữ lên Cloudinary...');
