@@ -207,8 +207,18 @@ export class TarotService {
 
         const streakStatus = await this.streakService.getStreak(user.coupleRoomId);
 
+        // -- NEW: Wait for AI instead of throwing 400 error --
         if (tarot.aiGenerating) {
-            throw new BadRequestException('AI đang giải mã thông điệp tình yêu của hai bạn. Vui lòng chờ trong giây lát...');
+            this.logger.log(`⏳ AI is still generating for room ${user.coupleRoomId}. Waiting...`);
+            // Wait up to 10 seconds (check every 1s)
+            for (let i = 0; i < 10; i++) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const updatedTarot = await this.tarotModel.findById(tarot._id);
+                if (updatedTarot && !updatedTarot.aiGenerating) {
+                    tarot = updatedTarot;
+                    break;
+                }
+            }
         }
 
         // Fallback logic if AI is not ready or failed
