@@ -199,7 +199,7 @@ export class TarotService {
         }
 
         const today = this.getTodayStr();
-        const tarot = await this.tarotModel.findOne({ coupleId: user.coupleRoomId, date: today });
+        let tarot = await this.tarotModel.findOne({ coupleId: user.coupleRoomId, date: today });
 
         if (!tarot || !tarot.readyAt) {
             throw new BadRequestException('Tarot is not ready to reveal');
