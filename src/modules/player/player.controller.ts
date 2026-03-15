@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Req, Query } from '@nestjs/common';
 import { PlayerService } from './player.service';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { PlayTrackDto } from './dto/play-track.dto';
 import { SeekDto } from './dto/seek.dto';
 import { TimerDto } from './dto/timer.dto';
@@ -22,10 +22,16 @@ export class PlayerController {
     }
 
     @Get('queue')
-    @ApiOperation({ summary: 'Lấy danh sách bài hát trong Queue' })
-    async getQueue(@Req() req: any) {
+    @ApiOperation({ summary: 'Lấy danh sách bài hát trong Queue (có phân trang)' })
+    @ApiParam({ name: 'page', required: false, description: 'Trang hiện tại (mặc định 1)' })
+    @ApiParam({ name: 'limit', required: false, description: 'Số bản ghi (mặc định 20)' })
+    async getQueue(
+        @Req() req: any,
+        @Query('page') page: string,
+        @Query('limit') limit: string
+    ) {
         const roomId = req.user.roomId || req.user.coupleRoomId;
-        return this.playerService.getQueue(roomId);
+        return this.playerService.getQueue(roomId, Number(page) || 1, Number(limit) || 20);
     }
 
     @Post('play')

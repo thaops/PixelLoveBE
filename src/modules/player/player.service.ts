@@ -51,6 +51,7 @@ export class PlayerService {
             status: { $in: ['ready', 'processing'] },
         })
             .sort({ createdAt: 1 })
+            .limit(5) // Chỉ lấy 5 bài để tối ưu state
             .select('title thumbnail duration audioUrl status');
 
         // Cast populated field back
@@ -85,15 +86,32 @@ export class PlayerService {
         };
     }
 
-    async getQueue(roomId: string) {
+    async getQueue(roomId: string, page = 1, limit = 20) {
+        const skip = (page - 1) * limit;
+
         const queue = await this.trackModel.find({
             roomId: new Types.ObjectId(roomId),
             status: { $in: ['ready', 'processing'] },
         })
             .sort({ createdAt: 1 })
-            .select('title thumbnail duration status');
+            .skip(skip)
+            .limit(limit)
+            .select('title thumbnail duration status audioUrl addedBy createdAt');
 
-        return queue;
+        const total = await this.trackModel.countDocuments({
+            roomId: new Types.ObjectId(roomId),
+            status: { $in: ['ready', 'processing'] },
+        });
+
+        return {
+            data: queue,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        };
     }
 
     async play(roomId: string, playDto: PlayTrackDto, requestUserId?: string) {
