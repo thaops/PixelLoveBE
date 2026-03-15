@@ -36,7 +36,13 @@ export class DailyTarot {
     revealedAt: Date;
 
     @Prop()
-    resultText: string;
+    resultEnergy: string;
+
+    @Prop()
+    resultMessage: string;
+
+    @Prop()
+    resultAdvice: string;
 
     @Prop()
     resultQuestion: string;

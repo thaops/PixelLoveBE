@@ -28,4 +28,10 @@ export class TarotController {
     async reveal(@CurrentUser() user: any) {
         return this.tarotService.reveal(user);
     }
+
+    @Post('reset')
+    @ApiOperation({ summary: 'Reset today tarot (Testing only)' })
+    async reset(@CurrentUser() user: any) {
+        return this.tarotService.resetTodayTarot(user);
+    }
 }

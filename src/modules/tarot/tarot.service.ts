@@ -68,7 +68,9 @@ export class TarotService {
             result: status === 'REVEALED' ? {
                 cardA: tarot.userACard,
                 cardB: tarot.userBCard,
-                text: tarot.resultText,
+                energy: tarot.resultEnergy,
+                message: tarot.resultMessage,
+                advice: tarot.resultAdvice,
                 question: tarot.resultQuestion
             } : null
         };
@@ -159,6 +161,8 @@ export class TarotService {
             const result = await this.tarotAiService.generateTarotResult(
                 tarot.userACard,
                 tarot.userBCard,
+                tarot.coupleId,
+                tarot.date,
                 {
                     names: [userA?.nickname || userA?.displayName || 'User A', userB?.nickname || userB?.displayName || 'User B'],
                     streak: streak.days,
@@ -170,7 +174,9 @@ export class TarotService {
             if (result) {
                 await this.tarotModel.findByIdAndUpdate(tarotId, {
                     $set: {
-                        resultText: result.text,
+                        resultEnergy: result.energy,
+                        resultMessage: result.message,
+                        resultAdvice: result.advice,
                         resultQuestion: result.question,
                         aiGenerated: true,
                         aiGenerating: false,
@@ -201,11 +207,15 @@ export class TarotService {
             throw new BadRequestException('Tarot is not ready to reveal');
         }
 
+        const streakStatus = await this.streakService.getStreak(user.coupleRoomId);
+
         // Fallback logic if AI is not ready or failed
         if (!tarot.aiGenerated) {
-            if (!tarot.resultText) {
-                const fallback = this.tarotAiService.getFallbackResult(tarot.userACard, tarot.userBCard);
-                tarot.resultText = fallback.text;
+            if (!tarot.resultMessage) {
+                const fallback = this.tarotAiService.getFallbackResult(tarot.userACard, tarot.userBCard, tarot.coupleId, tarot.date);
+                tarot.resultEnergy = fallback.energy;
+                tarot.resultMessage = fallback.message;
+                tarot.resultAdvice = fallback.advice;
                 tarot.resultQuestion = fallback.question;
             }
             tarot.aiGenerated = true;
@@ -222,19 +232,28 @@ export class TarotService {
 
         await tarot.save();
 
-        const streak = await this.streakService.getStreak(user.coupleRoomId);
-
         const result = {
             cardA: tarot.userACard,
             cardB: tarot.userBCard,
-            text: tarot.resultText,
+            energy: tarot.resultEnergy,
+            message: tarot.resultMessage,
+            advice: tarot.resultAdvice,
             question: tarot.resultQuestion,
-            streak: streak.days
+            streak: streakStatus.days
         };
 
         this.eventsGateway.emitToCoupleRoom(user.coupleRoomId, 'tarotReveal', result);
 
         return result;
+    }
+
+    async resetTodayTarot(user: any) {
+        if (!user.coupleRoomId) {
+            throw new ForbiddenException('Couple required');
+        }
+        const today = this.getTodayStr();
+        await this.tarotModel.deleteOne({ coupleId: user.coupleRoomId, date: today });
+        return { success: true, message: `Reset tarot for ${today}` };
     }
 
     async expireDailyTarots() {
