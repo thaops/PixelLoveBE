@@ -17,7 +17,8 @@ export class PlayerController {
     @ApiOperation({ summary: 'Lấy trạng thái Player hiện tại của Room' })
     async getPlayerState(@Req() req: any) {
         const roomId = req.user.roomId || req.user.coupleRoomId;
-        return this.playerService.getPlayerState(roomId);
+        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
+        return this.playerService.getPlayerState(roomId, userId);
     }
 
     @Get('queue')

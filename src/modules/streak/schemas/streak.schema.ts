@@ -19,6 +19,12 @@ export class Streak {
 
     @Prop({ type: String, default: null })
     lastCountedDate: string | null; // yyyy-mm-dd format
+
+    @Prop({ type: Date, default: null })
+    lastRestoredAt: Date | null;
+
+    @Prop({ default: 0 })
+    brokenStreakDays: number;
 }
 
 export const StreakSchema = SchemaFactory.createForClass(Streak);

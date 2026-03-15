@@ -12,4 +12,10 @@ export class StreakResponseDto {
 
     @ApiProperty({ example: 6 })
     hoursToBreak: number;
+
+    @ApiProperty({ example: true })
+    canRestore: boolean;
+
+    @ApiProperty({ example: 10 })
+    brokenStreakDays: number;
 }

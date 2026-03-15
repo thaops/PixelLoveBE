@@ -7,6 +7,7 @@ import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.sche
 import { EventsModule } from '../events/events.module';
 import { NotificationModule } from '../notification/notification.module';
 import { DeviceModule } from '../device/device.module';
+import { StreakModule } from '../streak/streak.module';
 
 /**
  * User Module
@@ -21,6 +22,7 @@ import { DeviceModule } from '../device/device.module';
     EventsModule,
     NotificationModule,
     DeviceModule,
+    StreakModule,
   ],
   controllers: [UserController],
   providers: [UserService],

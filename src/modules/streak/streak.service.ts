@@ -42,6 +42,7 @@ export class StreakService {
             const diffMs = now.getTime() - oldLatest.getTime();
             if (diffMs > 24 * 60 * 60 * 1000) {
                 if (streak.currentDays > 0) {
+                    streak.brokenStreakDays = streak.currentDays; // Lưu lại số ngày trước khi mất
                     await this.notificationService.sendStreakBroken(coupleId);
                 }
                 streak.currentDays = 0;
@@ -78,12 +79,12 @@ export class StreakService {
 
     async getStreak(coupleId: string): Promise<StreakResponseDto> {
         if (!coupleId) {
-            return { days: 0, level: 'broken', missingSide: null, hoursToBreak: 0 };
+            return { days: 0, level: 'broken', missingSide: null, hoursToBreak: 0, canRestore: false, brokenStreakDays: 0 };
         }
 
         const streak = await this.streakModel.findOne({ coupleId });
         if (!streak) {
-            return { days: 0, level: 'broken', missingSide: null, hoursToBreak: 0 };
+            return { days: 0, level: 'broken', missingSide: null, hoursToBreak: 0, canRestore: false, brokenStreakDays: 0 };
         }
 
         const now = new Date();
@@ -92,7 +93,7 @@ export class StreakService {
         const latest = (lastA && lastB) ? (lastA > lastB ? lastA : lastB) : (lastA || lastB);
 
         if (!latest) {
-            return { days: 0, level: 'broken', missingSide: null, hoursToBreak: 0 };
+            return { days: 0, level: 'broken', missingSide: null, hoursToBreak: 0, canRestore: false, brokenStreakDays: 0 };
         }
 
         const diffHours = (now.getTime() - latest.getTime()) / (1000 * 60 * 60);
@@ -110,11 +111,22 @@ export class StreakService {
 
         const hoursToBreak = Math.max(0, 24 - diffHours);
 
+        let canRestore = false;
+        if (streak.brokenStreakDays > 0) {
+            const lastRestored = streak.lastRestoredAt ? new Date(streak.lastRestoredAt).getTime() : 0;
+            const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+            if (Date.now() - lastRestored >= oneWeekMs) {
+                canRestore = true;
+            }
+        }
+
         return {
             days: level === 'broken' ? 0 : streak.currentDays,
             level,
             missingSide,
             hoursToBreak: Math.floor(hoursToBreak),
+            canRestore,
+            brokenStreakDays: streak.brokenStreakDays,
         };
     }
 
@@ -149,5 +161,32 @@ export class StreakService {
                 }
             }
         }
+    }
+
+    async restoreStreak(coupleId: string) {
+        const streak = await this.streakModel.findOne({ coupleId });
+        if (!streak || streak.brokenStreakDays === 0) {
+            throw new Error('Không có chuỗi nào để khôi phục');
+        }
+
+        const now = new Date();
+        if (streak.lastRestoredAt) {
+            const diffMs = now.getTime() - new Date(streak.lastRestoredAt).getTime();
+            if (diffMs < 7 * 24 * 60 * 60 * 1000) {
+                throw new Error('Bạn chỉ có thể khôi phục 1 lần mỗi tuần');
+            }
+        }
+
+        streak.currentDays = streak.brokenStreakDays;
+        streak.brokenStreakDays = 0;
+        streak.lastRestoredAt = now;
+        
+        // Cập nhật lại thời gian tương tác để không bị mất ngay lập tức
+        streak.lastInteractionA = now;
+        streak.lastInteractionB = now;
+        streak.lastCountedDate = now.toISOString().split('T')[0];
+
+        await streak.save();
+        return { success: true, currentDays: streak.currentDays };
     }
 }

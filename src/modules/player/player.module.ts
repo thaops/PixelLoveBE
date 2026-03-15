@@ -5,6 +5,8 @@ import { PlayerService } from './player.service';
 import { Track, TrackSchema } from '../tracks/schemas/track.schema';
 import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.schema';
 import { EventsModule } from '../events/events.module';
+import { NotificationModule } from '../notification/notification.module';
+import { StreakModule } from '../streak/streak.module';
 import { BullModule } from '@nestjs/bullmq';
 
 @Module({
@@ -14,6 +16,8 @@ import { BullModule } from '@nestjs/bullmq';
             { name: CoupleRoom.name, schema: CoupleRoomSchema },
         ]),
         EventsModule,
+        NotificationModule,
+        StreakModule,
         BullModule.registerQueue({
             name: 'audio-convert',
         }),

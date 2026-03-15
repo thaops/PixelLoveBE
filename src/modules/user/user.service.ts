@@ -9,6 +9,7 @@ import { calculateZodiac } from '../../shared/utils/zodiac.util';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationService } from '../notification/notification.service';
 import { DeviceService } from '../device/device.service';
+import { StreakService } from '../streak/streak.service';
 
 /**
  * User Service
@@ -24,6 +25,7 @@ export class UserService {
     private eventsGateway: EventsGateway,
     private notificationService: NotificationService,
     private deviceService: DeviceService,
+    private streakService: StreakService,
   ) { }
 
   /**
@@ -280,6 +282,11 @@ export class UserService {
     // Check and push "Partner open app"
     if (user && user.partnerId) {
       await this.notificationService.sendPartnerOpen(userId);
+      
+      // Ghi nhận Streak khi vào app
+      if (user.coupleRoomId) {
+        await this.streakService.recordInteraction(userId, user.coupleRoomId);
+      }
     }
 
     return { success: true };

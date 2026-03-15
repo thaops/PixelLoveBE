@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { StreakService } from './streak.service';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
@@ -20,5 +20,14 @@ export class StreakController {
             return { days: 0, level: 'broken', missingSide: null, hoursToBreak: 0 };
         }
         return this.streakService.getStreak(user.coupleRoomId);
+    }
+
+    @Post('restore')
+    @ApiOperation({ summary: 'Khôi phục chuỗi (1 lần mỗi tuần)' })
+    async restoreStreak(@CurrentUser() user: any) {
+        if (!user.coupleRoomId) {
+            throw new Error('Bạn chưa ghép đôi');
+        }
+        return this.streakService.restoreStreak(user.coupleRoomId);
     }
 }

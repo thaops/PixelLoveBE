@@ -173,4 +173,35 @@ export class NotificationService {
             await this.logModel.create({ userId: partner._id.toString(), type: 'streak_broken' });
         }
     }
+
+    async sendMusicListening(actorUserId: string) {
+        const actor = await this.userModel.findById(actorUserId).lean() as any;
+        if (!actor || !actor.partnerId) return;
+
+        const partner = await this.userModel.findById(actor.partnerId).lean() as any;
+        if (!partner) return;
+
+        // Don't push if partner is recently online (< 2m)
+        if (partner.lastActiveAt) {
+            const diffMs = Date.now() - new Date(partner.lastActiveAt).getTime();
+            if (diffMs < 2 * 60 * 1000) return;
+        }
+
+        const settings = await this.getSettings(partner._id.toString());
+        if (!settings.musicListening) return;
+
+        // Cooldown 2 hours for music notification
+        const canPush = await this.canSend(partner._id.toString(), 'music_listening', 2 * 60);
+        if (!canPush) return;
+
+        const title = '🎶 Người ấy đang nghe nhạc';
+        const message = `${actor.nickname || actor.displayName || 'Người ấy'} đang nghe nhạc nè`;
+
+        await this.sendToUser(partner._id.toString(), title, message, {
+            type: 'music_listening',
+            actorId: actorUserId,
+        });
+
+        await this.logModel.create({ userId: partner._id.toString(), type: 'music_listening' });
+    }
 }

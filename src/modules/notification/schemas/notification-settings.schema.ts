@@ -19,6 +19,9 @@ export class NotificationSettings {
 
     @Prop({ default: true })
     partnerOpen: boolean;
+
+    @Prop({ default: true })
+    musicListening: boolean;
 }
 
 export const NotificationSettingsSchema = SchemaFactory.createForClass(NotificationSettings);

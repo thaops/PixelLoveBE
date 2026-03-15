@@ -8,6 +8,8 @@ import { PlayTrackDto } from './dto/play-track.dto';
 import { SeekDto } from './dto/seek.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TimerDto } from './dto/timer.dto';
+import { NotificationService } from '../notification/notification.service';
+import { StreakService } from '../streak/streak.service';
 
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -20,10 +22,20 @@ export class PlayerService {
         @InjectModel(CoupleRoom.name) private roomModel: Model<CoupleRoomDocument>,
         @InjectModel(Track.name) private trackModel: Model<TrackDocument>,
         private readonly eventsGateway: EventsGateway,
+        private readonly notificationService: NotificationService,
+        private readonly streakService: StreakService,
         @InjectQueue('audio-convert') private audioQueue: Queue,
     ) { }
 
-    async getPlayerState(roomId: string) {
+    async getPlayerState(roomId: string, userId?: string) {
+        if (userId) {
+            this.notificationService.sendMusicListening(userId).catch(err =>
+                this.logger.error(`Failed to send music notification: ${err.message}`)
+            );
+            this.streakService.recordInteraction(userId, roomId).catch(err =>
+                this.logger.error(`Failed to record music interaction: ${err.message}`)
+            );
+        }
         const room = await this.roomModel.findById(roomId).populate('currentTrackId');
         if (!room) {
             throw new NotFoundException('Room not found');
