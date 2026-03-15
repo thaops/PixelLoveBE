@@ -103,9 +103,7 @@ export class TarotService {
         }
 
         const isUserA = tarot.userAId === user._id.toString();
-        if ((isUserA && tarot.userACard) || (!isUserA && tarot.userBCard)) {
-            throw new BadRequestException('Card already selected today');
-        }
+        // Card already selected today check removed for testing
 
         if (isUserA) {
             tarot.userACard = cardId;

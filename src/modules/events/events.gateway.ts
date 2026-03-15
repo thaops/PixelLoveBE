@@ -81,8 +81,9 @@ export class EventsGateway
 
       // If user is in a couple room, join that room too
       if (user.coupleRoomId) {
-        await client.join(`couple:${user.coupleRoomId}`);
-        this.logger.log(`User ${user._id} joined couple room: ${user.coupleRoomId}`);
+        const coupleRoom = `couple:${user.coupleRoomId.toString()}`;
+        await client.join(coupleRoom);
+        this.logger.log(`User ${user._id} joined couple room: ${coupleRoom}`);
       }
 
       // If user has a roomId (which might be the same or different), join it as well
@@ -183,10 +184,12 @@ export class EventsGateway
   /**
    * Emit event to all users in a couple room
    */
-  emitToCoupleRoom(coupleRoomId: string, event: string, data: any) {
-    this.server.to(`couple:${coupleRoomId}`).emit(event, data);
+  async emitToCoupleRoom(coupleRoomId: string, event: string, data: any) {
+    const roomName = `couple:${coupleRoomId.toString()}`;
+    const clients = await this.server.in(roomName).fetchSockets();
+    this.server.to(roomName).emit(event, data);
     this.logger.log(
-      `Emitted ${event} to couple room: ${coupleRoomId}`,
+      `Emitted ${event} to room ${roomName}. Connected clients in room: ${clients.length}`,
     );
   }
 
