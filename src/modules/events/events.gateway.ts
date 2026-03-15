@@ -77,7 +77,7 @@ export class EventsGateway
       this.logger.log(`User connected: ${user._id} (socket: ${client.id})`);
 
       // Join user's personal room
-      await client.join(`user:${user._id}`);
+      await client.join(`user:${user._id.toString()}`);
 
       // If user is in a couple room, join that room too
       if (user.coupleRoomId) {

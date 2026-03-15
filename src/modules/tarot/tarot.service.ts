@@ -122,7 +122,7 @@ export class TarotService {
 
         await tarot.save();
 
-        this.eventsGateway.emitToUser(user.partnerId, bothSelected ? 'tarotReady' : 'tarotSelected', {
+        this.eventsGateway.emitToCoupleRoom(user.coupleRoomId, bothSelected ? 'tarotReady' : 'tarotSelected', {
             by: user._id.toString()
         });
 
