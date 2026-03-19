@@ -113,6 +113,19 @@ export class EventsGateway
     const userId = this.connectedUsers.get(client.id);
     if (userId) {
       this.logger.log(`User disconnected: ${userId} (socket: ${client.id})`);
+
+      // If user was in a player room, notify partner before deleting
+      const user = client.data.user;
+      if (user) {
+        const roomId = user.coupleRoomId || user.roomId;
+        if (roomId) {
+          this.server.to(`couple:${roomId}`).emit('player:partner-presence', {
+            userId,
+            status: 'offline'
+          });
+        }
+      }
+
       this.connectedUsers.delete(client.id);
     }
   }
@@ -179,6 +192,76 @@ export class EventsGateway
   ) {
     await client.leave(`couple:${data.coupleRoomId}`);
     client.emit('leftCoupleRoom', { coupleRoomId: data.coupleRoomId });
+  }
+
+  /**
+   * User enters player screen
+   */
+  @SubscribeMessage('player:enter')
+  async handlePlayerEnter(@ConnectedSocket() client: Socket) {
+    const userId = client.data.userId;
+    const user = client.data.user;
+    if (!user) return;
+
+    const roomId = user.coupleRoomId || user.roomId;
+    if (!roomId) return;
+
+    const playerRoom = `player-active:${roomId}`;
+    const coupleRoom = `couple:${roomId}`;
+
+    // Join the player active room
+    await client.join(playerRoom);
+
+    // Notify partner that I am here
+    client.to(coupleRoom).emit('player:partner-presence', {
+      userId,
+      status: 'online',
+      avatar: user.avatar,
+      nickname: user.nickname || user.displayName
+    });
+
+    // Check if partner is already in the player room
+    const sockets = await this.server.in(playerRoom).fetchSockets();
+    const partnerSocket = sockets.find(s => s.data.userId !== userId);
+
+    if (partnerSocket) {
+      const partnerUser = partnerSocket.data.user;
+      // Tell current user that partner is already here
+      client.emit('player:partner-presence', {
+        userId: partnerSocket.data.userId,
+        status: 'online',
+        avatar: partnerUser?.avatar,
+        nickname: partnerUser?.nickname || partnerUser?.displayName
+      });
+    }
+
+    this.logger.log(`User ${userId} entered player screen in room ${roomId}`);
+  }
+
+  /**
+   * User leaves player screen
+   */
+  @SubscribeMessage('player:leave')
+  async handlePlayerLeave(@ConnectedSocket() client: Socket) {
+    const userId = client.data.userId;
+    const user = client.data.user;
+    if (!user) return;
+
+    const roomId = user.coupleRoomId || user.roomId;
+    if (!roomId) return;
+
+    const playerRoom = `player-active:${roomId}`;
+    const coupleRoom = `couple:${roomId}`;
+
+    await client.leave(playerRoom);
+
+    // Notify partner that I left
+    client.to(coupleRoom).emit('player:partner-presence', {
+      userId,
+      status: 'offline'
+    });
+
+    this.logger.log(`User ${userId} left player screen in room ${roomId}`);
   }
 
   /**
