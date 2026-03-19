@@ -46,13 +46,15 @@ export class PlayerService {
             currentTime = currentTime + (Date.now() - new Date(room.startedAt).getTime()) / 1000;
         }
 
-        const queue = await this.trackModel.find({
+        const commonTrackQuery = {
             roomId: new Types.ObjectId(roomId),
             status: { $in: ['ready', 'processing'] },
             removedFromRoom: { $ne: true },
-        })
+        };
+
+        const queue = await this.trackModel.find(commonTrackQuery)
             .sort({ createdAt: 1 })
-            .limit(5) // Chỉ lấy 5 bài để tối ưu state
+            .limit(50) // Lấy 50 bài để mobile hiển thị danh sách ban đầu tốt hơn
             .select('title thumbnail duration audioUrl status');
 
         // Cast populated field back
@@ -71,6 +73,17 @@ export class PlayerService {
             currentTrack.status = 'processing';
         }
 
+        // Tính toán vị trí hiện tại của bài hát trong toàn bộ hàng đợi
+        let currentIndex = -1;
+        if (currentTrack) {
+            // Đếm số bài hát có ngày tạo (createdAt) nhỏ hơn bài hiện tại
+            currentIndex = await this.trackModel.countDocuments({
+                ...commonTrackQuery,
+                createdAt: { $lt: currentTrack.createdAt }
+            });
+        }
+        const totalItems = await this.trackModel.countDocuments(commonTrackQuery);
+
         return {
             currentTrack: currentTrack ? {
                 _id: currentTrack._id,
@@ -82,6 +95,8 @@ export class PlayerService {
             } : null,
             isPlaying: room.isPlaying,
             currentTime,
+            currentIndex, // Vị trí 0-indexed của bài hiện tại
+            totalItems,   // Tổng số bài trong queue
             queue,
             timerEndsAt: room.timerEndsAt,
         };
