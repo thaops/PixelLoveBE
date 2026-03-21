@@ -66,6 +66,18 @@ export class LeaderboardStreakItemDto {
     loveDays: number;
 
     @ApiProperty({
+        description: 'Love Power Score (Total interaction metric)',
+        example: 15600,
+    })
+    lpScore: number;
+
+    @ApiProperty({
+        description: 'Total hearts received from others',
+        example: 850,
+    })
+    heartsCount: number;
+
+    @ApiProperty({
         description: 'Rank position',
         example: 1,
     })
@@ -86,6 +98,13 @@ export class LeaderboardStreakResponseDto {
         required: false,
     })
     myStreak?: number;
+
+    @ApiProperty({
+        description: 'Current user LP Score',
+        example: 12500,
+        required: false,
+    })
+    myLpScore?: number;
 
     @ApiProperty({
         description: 'Leaderboard list',

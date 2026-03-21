@@ -434,18 +434,28 @@ export class PetController {
   @Get('leaderboard/streak')
   @ApiOperation({
     summary: 'Get streak leaderboard',
-    description: 'Get top 50 couples with highest streak and my rank',
+    description: 'Get top 50 couples with highest streak and my rank (Legacy)',
   })
   @ApiResponse({
     status: 200,
     description: 'Leaderboard retrieved successfully',
     type: LeaderboardStreakResponseDto,
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - Invalid or missing JWT token',
-  })
   async getStreakLeaderboard(@CurrentUser() user: any) {
     return this.petService.getStreakLeaderboard(user);
+  }
+
+  @Get('leaderboard')
+  @ApiOperation({
+    summary: 'Get Love Power leaderboard',
+    description: 'Get top 50 couples with highest LP Score and my rank',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Leaderboard retrieved successfully',
+    type: LeaderboardStreakResponseDto,
+  })
+  async getLeaderboard(@CurrentUser() user: any) {
+    return this.petService.getLeaderboard(user);
   }
 }

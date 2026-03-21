@@ -1,9 +1,10 @@
-import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Param, BadRequestException } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiParam,
 } from '@nestjs/swagger';
 import { CoupleService } from './couple.service';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
@@ -189,8 +190,39 @@ export class CoupleController {
     },
   })
   @ApiResponse({ status: 400, description: 'Not in a couple' })
-  async breakUp(@CurrentUser() user: any) {
-    return this.coupleService.breakUp(user._id);
+  /**
+   * GET /couple/detail/:coupleId
+   * Get detail info of a couple
+   */
+  @Get('detail/:coupleId')
+  @ApiOperation({ summary: 'Get detailed information for a couple' })
+  @ApiParam({ name: 'coupleId', description: 'ID of the couple' })
+  async getDetail(@Param('coupleId') coupleId: string) {
+    return this.coupleService.getCoupleDetail(coupleId);
+  }
+
+  /**
+   * POST /couple/heart/:coupleId
+   * Send a heart to a couple
+   */
+  @Post('heart/:coupleId')
+  @ApiOperation({ summary: 'Send heart to a couple' })
+  @ApiParam({ name: 'coupleId', description: 'ID of the couple to heart' })
+  async heart(@Param('coupleId') coupleId: string) {
+    return this.coupleService.heartCouple(coupleId);
+  }
+
+  /**
+   * POST /couple/gallery/upload
+   * Upload image to couple gallery
+   */
+  @Post('gallery/upload')
+  @ApiOperation({ summary: 'Upload image to current couple gallery' })
+  async uploadGallery(@CurrentUser() user: any, @Body('imageUrl') imageUrl: string) {
+    if (!user.coupleRoomId) {
+      throw new BadRequestException('Not in a couple');
+    }
+    return this.coupleService.uploadGalleryPhoto(user.coupleRoomId, imageUrl);
   }
 }
 

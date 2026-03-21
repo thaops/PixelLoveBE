@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CoupleRoom, CoupleRoomDocument } from './schemas/couple-room.schema';
@@ -12,6 +13,7 @@ import { CreateCoupleDto } from './dto/create-couple.dto';
 import { JoinCoupleDto } from './dto/join-couple.dto';
 import { generateCode } from '../../shared/utils/code-generator.util';
 import { generateCoupleCode } from '../../shared/utils/zodiac.util';
+import { Streak, StreakDocument } from '../streak/schemas/streak.schema';
 import { UserService } from '../user/user.service';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -29,6 +31,8 @@ export class CoupleService {
     private coupleRoomModel: Model<CoupleRoomDocument>,
     @InjectModel(User.name)
     private userModel: Model<UserDocument>,
+    @InjectModel(Streak.name)
+    private streakModel: Model<StreakDocument>,
     private userService: UserService,
     private eventsGateway: EventsGateway,
   ) { }
@@ -701,10 +705,155 @@ export class CoupleService {
         members,
         daysInLove,
         backgroundUrl,
+        totalHearts: room.totalHearts || 0,
+        lpScore: room.lpScore || 0,
       });
     });
 
     return result;
+  }
+
+  /**
+   * Get detail of a couple room
+   */
+  async getCoupleDetail(coupleId: string) {
+    const coupleRoom = await this.coupleRoomModel.findById(coupleId).lean();
+    if (!coupleRoom) {
+      throw new NotFoundException('Couple room not found');
+    }
+
+    const { members, daysInLove } = await this.getCoupleBasicInfo(coupleRoom);
+    
+    // Get pet level
+    // In this app, pet level might be in Pet model or CoupleRoom (legacy)
+    // Let's check both or use the legacy one for now since it's in the schema
+    const petLevel = coupleRoom.petLevel || 1;
+
+    return {
+      coupleId: String(coupleRoom._id),
+      bio: (coupleRoom as any).bio || 'Mãi bên nhau bạn nhé! ❤️',
+      gallery: (coupleRoom as any).gallery || [],
+      stats: {
+        streak: await this.getStreakDays(coupleId),
+        loveDays: daysInLove,
+        petLevel: petLevel,
+        totalHearts: (coupleRoom as any).totalHearts || 0,
+      },
+      members,
+    };
+  }
+
+  /**
+   * Helper to get basic info for a room
+   */
+  private async getCoupleBasicInfo(room: any) {
+    const users = await this.userModel
+      .find({ _id: { $in: room.partners } })
+      .select('_id nickname displayName avatarUrl')
+      .lean();
+
+    const members = users.map((u) => ({
+      userId: String(u._id),
+      name: u.nickname || u.displayName || 'User',
+      avatarUrl: u.avatarUrl || '',
+    }));
+
+    const loveStartDate = room.startDate ? new Date(room.startDate) : new Date();
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - loveStartDate.getTime());
+    const daysInLove = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return { members, daysInLove };
+  }
+
+  /**
+   * Get streak days for a couple
+   */
+  private async getStreakDays(coupleId: string): Promise<number> {
+    const streak = await this.streakModel.findOne({ coupleId }).lean();
+    return streak?.currentDays || 0;
+  }
+
+  /**
+   * Heart a couple
+   */
+  async heartCouple(coupleId: string) {
+    const coupleRoom = await this.coupleRoomModel.findById(coupleId);
+    if (!coupleRoom) {
+      throw new NotFoundException('Couple room not found');
+    }
+
+    coupleRoom.totalHearts = (coupleRoom.totalHearts || 0) + 1;
+    
+    // Recalculate LP Score
+    // lpScore = (streak * 10) + (loveDays * 5) + (petLevel * 100) + (hearts * 2)
+    const streak = await this.getStreakDays(coupleId);
+    const loveDays = this.calculateLoveDays(coupleRoom.startDate);
+    const petLevel = coupleRoom.petLevel || 1;
+    
+    coupleRoom.lpScore = (streak * 10) + (loveDays * 5) + (petLevel * 100) + (coupleRoom.totalHearts * 2);
+    
+    await coupleRoom.save();
+
+    return {
+      success: true,
+      newHeartsCount: coupleRoom.totalHearts,
+      newLpScore: coupleRoom.lpScore,
+    };
+  }
+
+  private calculateLoveDays(startDate: Date): number {
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - startDate.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }
+
+  /**
+   * Upload to gallery
+   */
+  async uploadGalleryPhoto(coupleRoomId: string, imageUrl: string) {
+    const coupleRoom = await this.coupleRoomModel.findById(coupleRoomId);
+    if (!coupleRoom) {
+      throw new NotFoundException('Couple room not found');
+    }
+
+    if (!coupleRoom.gallery) {
+      coupleRoom.gallery = [];
+    }
+
+    coupleRoom.gallery.push(imageUrl);
+    await coupleRoom.save();
+
+    return { imageUrl };
+  }
+
+  /**
+   * Daily cron job to update LP Scores for all couples
+   * Runs at midnight every day
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async updateAllLpScores() {
+    this.logger.log('Updating all couple LP Scores...');
+    const couples = await this.coupleRoomModel.find({});
+    
+    for (const couple of couples) {
+      try {
+        const streak = await this.getStreakDays(String(couple._id));
+        const loveDays = this.calculateLoveDays(couple.startDate);
+        const petLevel = couple.petLevel || 1;
+        const hearts = couple.totalHearts || 0;
+        
+        const newLpScore = (streak * 10) + (loveDays * 5) + (petLevel * 100) + (hearts * 2);
+        
+        await this.coupleRoomModel.updateOne(
+          { _id: couple._id },
+          { $set: { lpScore: newLpScore } }
+        );
+      } catch (error) {
+        this.logger.error(`Error updating LP Score for couple ${couple._id}: ${error.message}`);
+      }
+    }
+    this.logger.log('Finished updating all LP Scores.');
   }
 }
 

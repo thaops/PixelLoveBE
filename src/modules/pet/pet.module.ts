@@ -7,6 +7,7 @@ import { PetAction, PetActionSchema } from './schemas/pet-action.schema';
 import { PetReaction, PetReactionSchema } from './schemas/pet-reaction.schema';
 import { Streak, StreakSchema } from '../streak/schemas/streak.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
+import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.schema';
 import { CoupleModule } from '../couple/couple.module';
 import { AlbumModule } from '../album/album.module';
 import { EventsModule } from '../events/events.module';
@@ -25,6 +26,7 @@ import { NotificationModule } from '../notification/notification.module';
       { name: Streak.name, schema: StreakSchema },
       { name: PetReaction.name, schema: PetReactionSchema },
       { name: User.name, schema: UserSchema },
+      { name: CoupleRoom.name, schema: CoupleRoomSchema },
     ]),
     forwardRef(() => CoupleModule),
     AlbumModule,

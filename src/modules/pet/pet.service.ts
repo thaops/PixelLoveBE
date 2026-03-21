@@ -6,6 +6,7 @@ import { PetAction, PetActionDocument } from './schemas/pet-action.schema';
 import { PetReaction, PetReactionDocument } from './schemas/pet-reaction.schema';
 import { Streak, StreakDocument } from '../streak/schemas/streak.schema';
 import { User, UserDocument } from '../user/schemas/user.schema';
+import { CoupleRoom, CoupleRoomDocument } from '../couple/schemas/couple-room.schema';
 import { AlbumService } from '../album/album.service';
 import { CoupleService } from '../couple/couple.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -44,6 +45,7 @@ export class PetService {
     private streakService: StreakService,
     private notificationService: NotificationService,
     @InjectModel(Streak.name) private streakModel: Model<StreakDocument>,
+    @InjectModel(CoupleRoom.name) private coupleRoomModel: Model<CoupleRoomDocument>,
   ) { }
 
   /**
@@ -1195,6 +1197,8 @@ export class PetService {
         backgroundUrl: info?.backgroundUrl || 'https://res.cloudinary.com/dukoun1pb/image/upload/v1768313007/back_ground_pet_1_m6frgf.png',
         streak: streak.currentDays || 0,
         loveDays: info?.daysInLove || 0,
+        lpScore: info?.lpScore || 0,
+        heartsCount: info?.totalHearts || 0,
         rank: index + 1,
       };
     });
@@ -1202,10 +1206,14 @@ export class PetService {
     // 4. Get my rank and streak (if user has couple)
     let myRank = 0;
     let myStreak = 0;
+    let myLpScore = 0;
 
     if (user.coupleRoomId) {
       const streakData = await this.streakService.getStreak(user.coupleRoomId);
       myStreak = streakData.days;
+
+      const myRoom = await this.coupleRoomModel.findById(user.coupleRoomId).lean();
+      myLpScore = (myRoom as any)?.lpScore || 0;
 
       if (myStreak > 0) {
         const betterCount = await this.streakModel.countDocuments({
@@ -1225,6 +1233,96 @@ export class PetService {
     return {
       myRank,
       myStreak,
+      myLpScore,
+      items,
+    };
+  }
+
+  /**
+   * Get LP Score leaderboard
+   */
+  async getLeaderboard(user: any) {
+    // 1. Get top 50 by LP Score
+    const topCouples = await this.coupleRoomModel
+      .find({ lpScore: { $gt: 0 } })
+      .sort({ lpScore: -1, totalHearts: -1 })
+      .limit(50)
+      .lean();
+
+    if (topCouples.length === 0) {
+      return {
+        myRank: 0,
+        myStreak: 0,
+        myLpScore: 0,
+        items: [],
+      };
+    }
+
+    // 2. Map items
+    const coupleIds = topCouples.map(c => String(c._id));
+    const [couplesInfo, pets, streaks] = await Promise.all([
+      this.coupleService.getCouplesBatchInfo(coupleIds),
+      this.petModel.find({ coupleId: { $in: coupleIds } }).lean(),
+      this.streakModel.find({ coupleId: { $in: coupleIds } }).lean(),
+    ]);
+
+    const petMap = new Map();
+    pets.forEach(p => petMap.set(p.coupleId, p));
+
+    const streakMap = new Map();
+    streaks.forEach(s => streakMap.set(s.coupleId, s));
+
+    const items = topCouples.map((room, index) => {
+      const info = couplesInfo.get(String(room._id));
+      const pet = petMap.get(String(room._id));
+      const streak = streakMap.get(String(room._id));
+      
+      return {
+        coupleId: String(room._id),
+        members: info?.members || [],
+        pet: {
+          level: pet?.level || room.petLevel || 1,
+        },
+        backgroundUrl: info?.backgroundUrl || 'https://res.cloudinary.com/dukoun1pb/image/upload/v1768313007/back_ground_pet_1_m6frgf.png',
+        streak: streak?.currentDays || 0,
+        loveDays: info?.daysInLove || 0,
+        lpScore: room.lpScore || 0,
+        heartsCount: room.totalHearts || 0,
+        rank: index + 1,
+      };
+    });
+
+    // 3. User rank
+    let myRank = 0;
+    let myStreak = 0;
+    let myLpScore = 0;
+
+    if (user.coupleRoomId) {
+      const myRoom = await this.coupleRoomModel.findById(user.coupleRoomId).lean();
+      myLpScore = (myRoom as any)?.lpScore || 0;
+      
+      const streakData = await this.streakService.getStreak(user.coupleRoomId);
+      myStreak = streakData.days;
+
+      if (myLpScore > 0) {
+        const betterCount = await this.coupleRoomModel.countDocuments({
+          lpScore: { $gt: myLpScore },
+        });
+        myRank = betterCount + 1;
+
+        const inTopListIndex = items.findIndex(
+          (item) => item.coupleId === user.coupleRoomId,
+        );
+        if (inTopListIndex !== -1) {
+          myRank = items[inTopListIndex].rank;
+        }
+      }
+    }
+
+    return {
+      myRank,
+      myStreak,
+      myLpScore,
       items,
     };
   }

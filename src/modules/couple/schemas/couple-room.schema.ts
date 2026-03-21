@@ -62,6 +62,18 @@ export class CoupleRoom {
 
   @Prop({ type: Date, default: null })
   timerEndsAt: Date | null;
+
+  @Prop({ default: 0 })
+  totalHearts: number;
+
+  @Prop({ default: '' })
+  bio: string;
+
+  @Prop({ type: [String], default: [] })
+  gallery: string[];
+
+  @Prop({ default: 0 })
+  lpScore: number;
 }
 
 export const CoupleRoomSchema = SchemaFactory.createForClass(CoupleRoom);

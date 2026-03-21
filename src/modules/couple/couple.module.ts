@@ -6,6 +6,7 @@ import { CoupleRoom, CoupleRoomSchema } from './schemas/couple-room.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
 import { UserModule } from '../user/user.module';
 import { EventsModule } from '../events/events.module';
+import { Streak, StreakSchema } from '../streak/schemas/streak.schema';
 
 /**
  * Couple Module
@@ -16,6 +17,7 @@ import { EventsModule } from '../events/events.module';
     MongooseModule.forFeature([
       { name: CoupleRoom.name, schema: CoupleRoomSchema },
       { name: User.name, schema: UserSchema },
+      { name: Streak.name, schema: StreakSchema },
     ]),
     UserModule,
     EventsModule,
