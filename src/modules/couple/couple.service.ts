@@ -828,6 +828,31 @@ export class CoupleService {
   }
 
   /**
+   * Calculate and update LP Score for a single couple
+   */
+  async updateLpScore(coupleId: string) {
+    try {
+      const couple = await this.coupleRoomModel.findById(coupleId);
+      if (!couple) return;
+
+      const streak = await this.getStreakDays(coupleId);
+      const loveDays = this.calculateLoveDays(couple.startDate);
+      const petLevel = couple.petLevel || 1;
+      const hearts = (couple as any).totalHearts || 0;
+
+      const newLpScore = (streak * 10) + (loveDays * 5) + (petLevel * 100) + (hearts * 2);
+
+      await this.coupleRoomModel.updateOne(
+        { _id: coupleId },
+        { $set: { lpScore: newLpScore } }
+      );
+      return newLpScore;
+    } catch (error) {
+      this.logger.error(`Error updating LP Score for couple ${coupleId}: ${error.message}`);
+    }
+  }
+
+  /**
    * Daily cron job to update LP Scores for all couples
    * Runs at midnight every day
    */

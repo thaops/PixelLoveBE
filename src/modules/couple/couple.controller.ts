@@ -21,7 +21,7 @@ import { SetLoveDateDto } from './dto/set-love-date.dto';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class CoupleController {
-  constructor(private readonly coupleService: CoupleService) {}
+  constructor(private readonly coupleService: CoupleService) { }
 
   /**
    * POST /couple/create-code

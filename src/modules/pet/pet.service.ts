@@ -275,6 +275,10 @@ export class PetService {
     }
 
     const pet = await this.getPetForCouple(user.coupleRoomId);
+    
+    // Tự động tính lại điểm LP khi vào app
+    await this.coupleService.updateLpScore(user.coupleRoomId);
+
     const nextLevelExp =
       this.EXP_PER_LEVEL - (pet.experience % this.EXP_PER_LEVEL);
 
@@ -1276,7 +1280,7 @@ export class PetService {
       const info = couplesInfo.get(String(room._id));
       const pet = petMap.get(String(room._id));
       const streak = streakMap.get(String(room._id));
-      
+
       return {
         coupleId: String(room._id),
         members: info?.members || [],
@@ -1300,7 +1304,7 @@ export class PetService {
     if (user.coupleRoomId) {
       const myRoom = await this.coupleRoomModel.findById(user.coupleRoomId).lean();
       myLpScore = (myRoom as any)?.lpScore || 0;
-      
+
       const streakData = await this.streakService.getStreak(user.coupleRoomId);
       myStreak = streakData.days;
 
