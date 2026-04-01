@@ -14,6 +14,12 @@ export class VideoItem {
 
   @Prop()
   thumbnail?: string;
+
+  @Prop()
+  duration?: number;
+
+  @Prop()
+  url?: string;
 }
 
 export type VideoRoomDocument = VideoRoom & Document;

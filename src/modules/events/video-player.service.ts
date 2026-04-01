@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { VideoRoom, VideoRoomDocument, VideoItem } from './schemas/video-room.schema';
+import * as ytdl from '@distube/ytdl-core';
 
 export interface VideoPlayerState {
   mode: 'video';
@@ -23,9 +24,52 @@ export class VideoPlayerService {
 
   constructor(
     @InjectModel(VideoRoom.name) private videoRoomModel: Model<VideoRoomDocument>,
-  ) {}
+  ) { }
 
-  // ─── Core Logic (Shared between Socket & REST) ───────────────────────────
+  // ─── Extraction Logic (Production Ready) ────────────────────────────────
+
+  /**
+   * Trích xuất VideoId từ mọi định dạng link YouTube (watch, youtu.be, shorts, raw...)
+   */
+  public extractVideoId(input: string): string | null {
+    if (!input) return null;
+
+    // Case 1: Raw videoId (11 ký tự chuẩn YouTube)
+    if (/^[a-zA-Z0-9_-]{11}$/.test(input)) {
+        return input;
+    }
+
+    // Case 2: Link URL (ytdl handle most cases: watch, youtu.be, embed, shorts, etc.)
+    try {
+        return ytdl.getURLVideoID(input);
+    } catch {
+        return null;
+    }
+  }
+
+  /**
+   * Lấy metadata của video
+   */
+  async getVideoMetadata(videoId: string): Promise<Partial<VideoItem>> {
+    try {
+      const url = `https://www.youtube.com/watch?v=${videoId}`;
+      const info = await ytdl.getBasicInfo(url);
+      const details = info.videoDetails;
+
+      return {
+        videoId,
+        title: details.title,
+        thumbnail: details.thumbnails?.[0]?.url,
+        duration: Number(details.lengthSeconds),
+        url: url,
+      };
+    } catch (e) {
+      this.logger.error(`Fetch metadata error for ${videoId}: ${e.message}`);
+      return { videoId }; // Fallback nếu không fetch được info
+    }
+  }
+
+  // ─── Business Logic ──────────────────────────────────────────────────────
 
   async getOrRestoreState(roomId: string): Promise<VideoPlayerState | null> {
     let state = this.videoRooms.get(roomId);
@@ -37,7 +81,7 @@ export class VideoPlayerService {
           mode: 'video',
           videoId: dbRoom.videoId || (currentItem?.videoId || ''),
           currentId: currentItem?.id || '',
-          videoQueue: dbRoom.videoQueue || [],
+          videoQueue: (dbRoom.videoQueue || []) as VideoItem[],
           currentIndex: dbRoom.currentIndex || 0,
           currentTime: dbRoom.currentTime || 0,
           isPlaying: dbRoom.isPlaying || false,
@@ -50,8 +94,17 @@ export class VideoPlayerService {
     return state || null;
   }
 
-  async initState(roomId: string, userId: string, videoId: string, resetQueue: boolean = true) {
-    const newItem: VideoItem = { id: this.generateId(), videoId };
+  async initState(roomId: string, userId: string, url: string, resetQueue: boolean = true) {
+    const videoId = this.extractVideoId(url);
+    if (!videoId) throw new BadRequestException('Invalid YouTube URL or videoId');
+
+    const metadata = await this.getVideoMetadata(videoId);
+    const newItem: VideoItem = { 
+        id: this.generateId(), 
+        ...metadata,
+        videoId 
+    };
+
     let videoQueue: VideoItem[] = [newItem];
     
     const existing = await this.getOrRestoreState(roomId);
@@ -81,12 +134,21 @@ export class VideoPlayerService {
 
   async addVideo(roomId: string, url: string) {
     const state = await this.getOrRestoreState(roomId);
-    if (!state) throw new Error('Room not initialized');
+    if (!state) throw new BadRequestException('Room not initialized');
 
     const videoId = this.extractVideoId(url);
-    if (!videoId) throw new Error('Invalid YouTube URL');
+    if (!videoId) throw new BadRequestException('Invalid YouTube URL or videoId');
 
-    const videoItem: VideoItem = { id: this.generateId(), videoId };
+    // Chống duplicate trong cùng 1 queue nếu muốn (optional)
+    const isDup = state.videoQueue.some(v => v.videoId === videoId);
+    if (isDup) {
+        this.logger.log(`Video ${videoId} already in queue for room ${roomId}`);
+        return state; 
+    }
+
+    const metadata = await this.getVideoMetadata(videoId);
+    const videoItem: VideoItem = { id: this.generateId(), ...metadata, videoId };
+    
     state.videoQueue.push(videoItem);
     state.lastActivity = new Date();
 
@@ -96,10 +158,10 @@ export class VideoPlayerService {
 
   async removeVideo(roomId: string, itemId: string) {
     const state = await this.getOrRestoreState(roomId);
-    if (!state) throw new Error('Room not initialized');
+    if (!state) throw new BadRequestException('Room not initialized');
 
     const index = state.videoQueue.findIndex(v => v.id === itemId);
-    if (index === -1) throw new Error('Item not found');
+    if (index === -1) throw new BadRequestException('Item not found');
 
     const isRemovingCurrent = state.currentIndex === index;
     state.videoQueue.splice(index, 1);
@@ -170,20 +232,10 @@ export class VideoPlayerService {
     return state.currentTime + elapsed;
   }
 
-  private extractVideoId(url: string): string | null {
-    try {
-      const u = new URL(url);
-      if (u.hostname.includes('youtube.com')) return u.searchParams.get('v');
-      if (u.hostname.includes('youtu.be')) return u.pathname.slice(1);
-      return null;
-    } catch { return null; }
-  }
-
   private generateId(): string {
     return Math.random().toString(36).substring(7);
   }
 
-  // To be used by Cron in Gateway
   getAllActiveRooms() {
     return this.videoRooms;
   }

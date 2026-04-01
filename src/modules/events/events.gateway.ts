@@ -72,8 +72,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleVideoInit(@ConnectedSocket() client: Socket, @MessageBody() data: { videoId: string; resetQueue?: boolean }) {
     const roomId = client.data.user?.coupleRoomId?.toString();
     if (!roomId) return;
-    const state = await this.videoPlayerService.initState(roomId, client.data.userId, data.videoId, data.resetQueue);
-    this.server.to(`couple:${roomId}`).emit('player:state', this.videoPlayerService.getSyncedState(state));
+    try {
+      const state = await this.videoPlayerService.initState(roomId, client.data.userId, data.videoId, data.resetQueue);
+      this.server.to(`couple:${roomId}`).emit('player:state', this.videoPlayerService.getSyncedState(state));
+    } catch (e) {
+      client.emit('player:error', { message: e.message });
+    }
   }
 
   @SubscribeMessage('player:update')
