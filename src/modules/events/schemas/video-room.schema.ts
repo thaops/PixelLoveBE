@@ -3,6 +3,9 @@ import { Document } from 'mongoose';
 
 @Schema({ _id: false })
 export class VideoItem {
+  @Prop({ default: () => Math.random().toString(36).substring(7) })
+  id: string; // ID duy nhất cho mỗi item trong queue (không phải videoId)
+
   @Prop({ required: true })
   videoId: string;
 

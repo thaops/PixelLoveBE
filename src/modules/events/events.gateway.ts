@@ -20,6 +20,7 @@ import { Cron } from '@nestjs/schedule';
 interface VideoPlayerState {
   mode: 'video';
   videoId: string;
+  currentId?: string; // ID duy nhất của item đang phát trong queue
   videoQueue: VideoItem[];
   currentIndex: number;
   currentTime: number;
@@ -30,7 +31,7 @@ interface VideoPlayerState {
 }
 
 /**
- * Events Gateway — Production Ready YouTube Watch Together
+ * Events Gateway — Professional Hybrid YouTube Watch Together (UUID/ID based removal)
  */
 @WebSocketGateway({
   namespace: '/events',
@@ -80,21 +81,22 @@ export class EventsGateway
       client.data.userId = user._id.toString();
       client.data.user = user;
       this.connectedUsers.set(client.id, user._id.toString());
-
       await client.join(`user:${user._id.toString()}`);
 
       if (user.coupleRoomId) {
         const roomId = user.coupleRoomId.toString();
         await client.join(`couple:${roomId}`);
 
-        // Restore from DB if RAM is empty (Server restart logic)
+        // Restore from DB if RAM is empty
         let videoState = this.videoRooms.get(roomId);
         if (!videoState) {
           const dbRoom = await this.videoRoomModel.findOne({ roomId }).lean();
           if (dbRoom) {
+            const currentItem = dbRoom.videoQueue[dbRoom.currentIndex];
             videoState = {
               mode: 'video',
-              videoId: dbRoom.videoId || (dbRoom.videoQueue[dbRoom.currentIndex]?.videoId || ''),
+              videoId: dbRoom.videoId || (currentItem?.videoId || ''),
+              currentId: currentItem?.id || '',
               videoQueue: dbRoom.videoQueue || [],
               currentIndex: dbRoom.currentIndex || 0,
               currentTime: dbRoom.currentTime || 0,
@@ -110,7 +112,7 @@ export class EventsGateway
           client.emit('player:state', {
             ...videoState,
             currentTime: this.getSyncedCurrentTime(videoState),
-            serverTime: Date.now(), // Thêm serverTime để Mobile xử lý drift
+            serverTime: Date.now(),
           });
         }
       }
@@ -127,11 +129,7 @@ export class EventsGateway
       const user = client.data.user;
       if (user) {
         const roomId = user.coupleRoomId || user.roomId;
-        if (roomId) {
-          this.server.to(`couple:${roomId}`).emit('player:partner-presence', { userId, status: 'offline' });
-          const state = this.videoRooms.get(roomId.toString());
-          if (state && state.isDirty) this.syncRoomToDb(roomId.toString(), state);
-        }
+        if (roomId) this.server.to(`couple:${roomId}`).emit('player:partner-presence', { userId, status: 'offline' });
       }
       this.connectedUsers.delete(client.id);
     }
@@ -147,11 +145,10 @@ export class EventsGateway
     return null;
   }
 
-  // ─── Video Events (Production Ready) ─────────────────────────────────────
+  // ─── Video Events ────────────────────────────────────────────────────────
 
   /**
-   * player:init — Khởi tạo chế độ video cho room
-   * Payload: { mode: 'video', videoId: string, resetQueue?: boolean }
+   * player:init — Khởi tạo chế độ video (ID based)
    */
   @SubscribeMessage('player:init')
   async handleVideoInit(
@@ -165,28 +162,29 @@ export class EventsGateway
     const roomId = (user.coupleRoomId || user.roomId)?.toString();
     if (!roomId) return;
 
-    let videoQueue: VideoItem[] = [{ videoId: data.videoId }];
+    // Generate unique ID for this item entry
+    const newItem: VideoItem = { id: this.generateId(), videoId: data.videoId };
+    let videoQueue: VideoItem[] = [newItem];
     
-    // Fix 5: Nếu không resetQueue, giữ lại list cũ
     const existing = this.videoRooms.get(roomId);
     if (existing && data.resetQueue === false) {
       videoQueue = existing.videoQueue;
       const alreadyInQueue = videoQueue.findIndex(v => v.videoId === data.videoId);
-      if (alreadyInQueue === -1) videoQueue.push({ videoId: data.videoId });
+      if (alreadyInQueue === -1) videoQueue.push(newItem);
     }
 
+    const currentIdx = videoQueue.findIndex(v => v.videoId === data.videoId);
     const state: VideoPlayerState = {
       mode: 'video',
       videoId: data.videoId,
+      currentId: videoQueue[currentIdx]?.id || newItem.id,
       videoQueue,
-      currentIndex: videoQueue.findIndex(v => v.videoId === data.videoId) || 0,
+      currentIndex: currentIdx === -1 ? 0 : currentIdx,
       currentTime: 0,
       isPlaying: false,
       hostId: userId,
       lastActivity: new Date(),
     };
-
-    if (state.currentIndex === -1) state.currentIndex = 0;
 
     this.videoRooms.set(roomId, state);
     
@@ -235,18 +233,18 @@ export class EventsGateway
     state.lastActivity = new Date();
     state.isDirty = true;
 
-    // Fix 2: Trả full dữ liệu videoId và serverTime cho đối phương
     client.to(`couple:${roomId}`).emit('player:update', {
       type: data.type,
       currentTime: time,
       isPlaying: state.isPlaying,
       videoId: state.videoId,
-      serverTime: Date.now(), // Fix 4: DRIFT HANDLING
+      currentId: state.currentId, // Cung cấp thêm ID thực tế đang phát
+      serverTime: Date.now(),
     });
   }
 
   /**
-   * player:add — Thêm video qua URL
+   * player:add — Thêm bài qua URL
    */
   @SubscribeMessage('player:add')
   async handleVideoAdd(
@@ -264,32 +262,31 @@ export class EventsGateway
 
     const videoId = this.extractVideoId(data.url);
     if (!videoId) {
-      // Fix 1: Trả lỗi cho mobile
       client.emit('player:error', { message: 'Invalid YouTube URL' });
       return;
     }
 
-    const videoItem = { videoId };
+    const videoItem: VideoItem = { id: this.generateId(), videoId };
     state.videoQueue.push(videoItem);
     state.lastActivity = new Date();
 
     await this.videoRoomModel.updateOne({ roomId }, { $push: { videoQueue: videoItem } });
 
-    // Fix 3: Trả full object chuẩn hóa
     this.server.to(`couple:${roomId}`).emit('player:queue-updated', {
       queue: state.videoQueue,
       currentIndex: state.currentIndex,
+      currentId: state.currentId, // Fix: Trả full ID để Mobile không bị lệch
       currentVideoId: state.videoId,
     });
   }
 
   /**
-   * player:remove — Xóa video khỏi queue
+   * player:remove — Xóa bài (Dùng ID, không dùng INDEX)
    */
   @SubscribeMessage('player:remove')
   async handleVideoRemove(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { index: number },
+    @MessageBody() data: { id: string }, // Dùng ID duy nhất của item
   ) {
     const user = client.data.user;
     if (!user) return;
@@ -300,27 +297,32 @@ export class EventsGateway
     const state = this.videoRooms.get(roomId);
     if (!state) return;
 
-    const index = data.index;
-    if (index < 0 || index >= state.videoQueue.length) return;
+    const index = state.videoQueue.findIndex(v => v.id === data.id);
+    if (index === -1) {
+      this.logger.warn(`Remove failed: Video item ID ${data.id} not found in room ${roomId}`);
+      return;
+    }
 
     const isRemovingCurrent = state.currentIndex === index;
     state.videoQueue.splice(index, 1);
 
+    // Fix index logic
     if (state.currentIndex > index) {
       state.currentIndex--;
     } else if (isRemovingCurrent) {
-      // Fix 6: Xử lý xóa đúng bài đang xem
       state.currentIndex = Math.min(state.currentIndex, state.videoQueue.length - 1);
       if (state.videoQueue.length > 0) {
         state.videoId = state.videoQueue[state.currentIndex].videoId;
+        state.currentId = state.videoQueue[state.currentIndex].id;
         state.currentTime = 0;
-        state.isPlaying = true; // Auto-play tiếp bài kế
+        state.isPlaying = true;
       }
     }
 
     if (state.videoQueue.length === 0) {
       state.currentIndex = 0;
       state.videoId = '';
+      state.currentId = '';
       state.isPlaying = false;
     }
 
@@ -337,13 +339,13 @@ export class EventsGateway
       }
     );
 
-    // Nếu xóa bài đang xem, emit state mới để sync ngay
     if (isRemovingCurrent) {
       this.server.to(`couple:${roomId}`).emit('player:state', { ...state, serverTime: Date.now() });
     } else {
       this.server.to(`couple:${roomId}`).emit('player:queue-updated', {
         queue: state.videoQueue,
         currentIndex: state.currentIndex,
+        currentId: state.currentId,
         currentVideoId: state.videoId,
       });
     }
@@ -361,6 +363,7 @@ export class EventsGateway
 
     state.currentIndex = (state.currentIndex + 1) % state.videoQueue.length;
     state.videoId = state.videoQueue[state.currentIndex].videoId;
+    state.currentId = state.videoQueue[state.currentIndex].id;
     state.currentTime = 0;
     state.isPlaying = true;
     state.lastActivity = new Date();
@@ -381,6 +384,7 @@ export class EventsGateway
 
     state.currentIndex = (state.currentIndex - 1 + state.videoQueue.length) % state.videoQueue.length;
     state.videoId = state.videoQueue[state.currentIndex].videoId;
+    state.currentId = state.videoQueue[state.currentIndex].id;
     state.currentTime = 0;
     state.isPlaying = true;
     state.lastActivity = new Date();
@@ -389,12 +393,8 @@ export class EventsGateway
     this.server.to(`couple:${roomId}`).emit('player:state', { ...state, serverTime: Date.now() });
   }
 
-  /**
-   * Fix 7: player:ended — Xử lý khi video kết thúc
-   */
   @SubscribeMessage('player:ended')
   async handleVideoEnded(@ConnectedSocket() client: Socket) {
-    this.logger.log(`Video ended in room of user ${client.data.userId}, moving to next...`);
     return this.handleVideoNext(client);
   }
 
@@ -459,6 +459,10 @@ export class EventsGateway
   }
 
   // ─── Utils ───────────────────────────────────────────────────────────────
+
+  private generateId(): string {
+    return Math.random().toString(36).substring(7);
+  }
 
   private extractVideoId(url: string): string | null {
     try {
