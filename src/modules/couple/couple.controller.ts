@@ -190,6 +190,10 @@ export class CoupleController {
     },
   })
   @ApiResponse({ status: 400, description: 'Not in a couple' })
+  async breakUp(@CurrentUser() user: any) {
+    return this.coupleService.breakUp(user._id);
+  }
+
   /**
    * GET /couple/detail/:coupleId
    * Get detail info of a couple
