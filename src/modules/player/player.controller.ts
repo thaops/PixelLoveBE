@@ -1,88 +1,130 @@
-import { Controller, Get, Post, Body, UseGuards, Req, Query } from '@nestjs/common';
-import { PlayerService } from './player.service';
+import { Controller, Get, Post, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
-import { PlayTrackDto } from './dto/play-track.dto';
-import { SeekDto } from './dto/seek.dto';
-import { TimerDto } from './dto/timer.dto';
+import { PlayerService } from './player.service';
+import { VideoPlayerService, VideoPlayerState } from './video-player.service';
+import { EventsGateway } from '../events/events.gateway';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiQuery } from '@nestjs/swagger';
 
-@ApiTags('Player (Room Sync Audio)')
+@ApiTags('Player (Room Sync Audio & Video)')
 @ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard)
 @Controller('player')
 export class PlayerController {
-    constructor(private readonly playerService: PlayerService) { }
+    constructor(
+        private readonly playerService: PlayerService,
+        private readonly videoPlayerService: VideoPlayerService,
+        private readonly eventsGateway: EventsGateway,
+    ) { }
 
+    // ─── Video Player (YouTube Watch Together) ──────────────────────────────
+
+    @Get('video/state')
+    @ApiOperation({ summary: 'Lấy trạng thái Video Player hiện tại (Realtime + Persist)' })
+    async getVideoState(@Req() req: any): Promise<VideoPlayerState | null> {
+        const roomId = (req.user.coupleRoomId || req.user.roomId)?.toString();
+        if (!roomId) return null;
+        const state = await this.videoPlayerService.getOrRestoreState(roomId);
+        return state ? this.videoPlayerService.getSyncedState(state) : null;
+    }
+
+    @Post('video/add')
+    @ApiOperation({ summary: 'Thêm video vào queue (REST API)' })
+    @ApiBody({ schema: { properties: { url: { type: 'string' } } } })
+    async addVideo(@Req() req: any, @Body('url') url: string) {
+        const roomId = (req.user.coupleRoomId || req.user.roomId)?.toString();
+        if (!roomId) throw new Error('No room');
+        
+        const state = await this.videoPlayerService.addVideo(roomId, url);
+        
+        // Broadcast Socket để đồng bộ thiết bị đối phương
+        this.eventsGateway.emitToCoupleRoom(roomId, 'player:queue-updated', {
+            queue: state.videoQueue,
+            currentIndex: state.currentIndex,
+            currentId: state.currentId,
+            currentVideoId: state.videoId
+        });
+        
+        return state;
+    }
+
+    @Delete('video/remove/:id')
+    @ApiOperation({ summary: 'Xóa video khỏi queue (REST API)' })
+    async removeVideo(@Req() req: any, @Param('id') id: string) {
+        const roomId = (req.user.coupleRoomId || req.user.roomId)?.toString();
+        if (!roomId) throw new Error('No room');
+
+        const { state, isRemovingCurrent } = await this.videoPlayerService.removeVideo(roomId, id);
+
+        // Broadcast Socket trạng thái mới nhất cho 2 thiết bị
+        if (isRemovingCurrent) {
+            this.eventsGateway.emitToCoupleRoom(roomId, 'player:state', this.videoPlayerService.getSyncedState(state));
+        } else {
+            this.eventsGateway.emitToCoupleRoom(roomId, 'player:queue-updated', {
+                queue: state.videoQueue,
+                currentIndex: state.currentIndex,
+                currentId: state.currentId,
+                currentVideoId: state.videoId
+            });
+        }
+
+        return { success: true };
+    }
+
+    // ─── Audio Player (Music Sync) ──────────────────────────────────────────
+    
     @Get('state')
-    @ApiOperation({ summary: 'Lấy trạng thái Player hiện tại của Room' })
-    async getPlayerState(@Req() req: any) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
-        return this.playerService.getPlayerState(roomId, userId);
+    @ApiOperation({ summary: 'Lấy trạng thái Audio Player hiện tại' })
+    async getAudioState(@Req() req: any) {
+        return this.playerService.getPlayerState(req.user.roomId || req.user.coupleRoomId, req.user._id);
     }
 
     @Get('queue')
-    @ApiOperation({ summary: 'Lấy danh sách bài hát trong Queue (có phân trang & tìm kiếm)' })
-    @ApiQuery({ name: 'page', required: false, description: 'Trang hiện tại (mặc định 1)' })
-    @ApiQuery({ name: 'limit', required: false, description: 'Số bản ghi mỗi trang (mặc định 20)' })
-    @ApiQuery({ name: 'search', required: false, description: 'Từ khóa tìm kiếm theo tên bài hát' })
+    @ApiOperation({ summary: 'Lấy danh sách nhạc trong queue' })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'search', required: false, type: String })
     async getQueue(
         @Req() req: any,
-        @Query('page') page: string,
-        @Query('limit') limit: string,
-        @Query('search') search: string
+        @Query('page') page?: number,
+        @Query('limit') limit?: number,
+        @Query('search') search?: string
     ) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        return this.playerService.getQueue(roomId, Number(page) || 1, Number(limit) || 20, search);
+        return this.playerService.getQueue(req.user.roomId || req.user.coupleRoomId, page, limit, search);
     }
 
     @Post('play')
-    @ApiOperation({ summary: 'Phát một bài hát trong Queue' })
-    @ApiBody({ type: PlayTrackDto })
-    async play(@Req() req: any, @Body() playDto: PlayTrackDto) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
-        return this.playerService.play(roomId, playDto, userId);
+    @ApiOperation({ summary: 'Phát một bài hát' })
+    async play(@Req() req: any, @Body() playDto: any) {
+        return this.playerService.play(req.user.roomId || req.user.coupleRoomId, playDto, req.user._id);
     }
 
     @Post('pause')
-    @ApiOperation({ summary: 'Tạm dừng bài hát hiện tại' })
+    @ApiOperation({ summary: 'Tạm dừng' })
     async pause(@Req() req: any) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
-        return this.playerService.pause(roomId, userId);
+        return this.playerService.pause(req.user.roomId || req.user.coupleRoomId, req.user._id);
     }
 
     @Post('seek')
-    @ApiOperation({ summary: 'Tua bài hát đến thời điểm cụ thể' })
-    @ApiBody({ type: SeekDto })
-    async seek(@Req() req: any, @Body() seekDto: SeekDto) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
-        return this.playerService.seek(roomId, seekDto, userId);
+    @ApiOperation({ summary: 'Tua nhạc' })
+    async seek(@Req() req: any, @Body() seekDto: any) {
+        return this.playerService.seek(req.user.roomId || req.user.coupleRoomId, seekDto, req.user._id);
     }
 
     @Post('next')
-    @ApiOperation({ summary: 'Chuyển bài hát tiếp theo' })
+    @ApiOperation({ summary: 'Bài kế tiếp' })
     async next(@Req() req: any) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
-        return this.playerService.next(roomId, userId);
+        return this.playerService.next(req.user.roomId || req.user.coupleRoomId, req.user._id);
     }
 
     @Post('previous')
-    @ApiOperation({ summary: 'Quay lại bài hát trước đó' })
+    @ApiOperation({ summary: 'Bài trước đó' })
     async previous(@Req() req: any) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        const userId = req.user.userId || req.user._id?.toString() || req.user.id;
-        return this.playerService.previous(roomId, userId);
+        return this.playerService.previous(req.user.roomId || req.user.coupleRoomId, req.user._id);
     }
 
     @Post('timer')
-    @ApiOperation({ summary: 'Hẹn giờ tắt nhạc cho cả 2 người' })
-    @ApiBody({ type: TimerDto })
-    async setTimer(@Req() req: any, @Body() timerDto: TimerDto) {
-        const roomId = req.user.roomId || req.user.coupleRoomId;
-        return this.playerService.setTimer(roomId, timerDto);
+    @ApiOperation({ summary: 'Hẹn giờ ngủ' })
+    async setTimer(@Req() req: any, @Body() timerDto: any) {
+        return this.playerService.setTimer(req.user.roomId || req.user.coupleRoomId, timerDto);
     }
 }
