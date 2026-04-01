@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { PlayerService } from './player.service';
-import { VideoPlayerService, VideoPlayerState } from './video-player.service';
+import { VideoPlayerService, VideoPlayerState } from '../events/video-player.service';
 import { EventsGateway } from '../events/events.gateway';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiQuery } from '@nestjs/swagger';
 

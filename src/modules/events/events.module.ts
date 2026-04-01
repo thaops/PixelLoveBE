@@ -11,6 +11,8 @@ import { getJwtConfig } from '../../config/jwt.config';
  * Events Module
  * Handles WebSocket real-time communication
  */
+import { VideoPlayerService } from './video-player.service';
+
 @Module({
   imports: [
     ConfigModule,
@@ -24,8 +26,8 @@ import { getJwtConfig } from '../../config/jwt.config';
       { name: VideoRoom.name, schema: VideoRoomSchema },
     ]),
   ],
-  providers: [EventsGateway],
-  exports: [EventsGateway],
+  providers: [EventsGateway, VideoPlayerService],
+  exports: [EventsGateway, VideoPlayerService],
 })
 export class EventsModule {}
 

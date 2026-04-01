@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { VideoRoom, VideoRoomDocument, VideoItem } from '../events/schemas/video-room.schema';
+import { VideoRoom, VideoRoomDocument, VideoItem } from './schemas/video-room.schema';
 
 export interface VideoPlayerState {
   mode: 'video';

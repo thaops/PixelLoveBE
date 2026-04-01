@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PlayerController } from './player.controller';
 import { PlayerService } from './player.service';
-import { VideoPlayerService } from './video-player.service';
 import { Track, TrackSchema } from '../tracks/schemas/track.schema';
 import { CoupleRoom, CoupleRoomSchema } from '../couple/schemas/couple-room.schema';
 import { VideoRoom, VideoRoomSchema } from '../events/schemas/video-room.schema';
@@ -26,7 +25,7 @@ import { BullModule } from '@nestjs/bullmq';
         }),
     ],
     controllers: [PlayerController],
-    providers: [PlayerService, VideoPlayerService],
-    exports: [PlayerService, VideoPlayerService],
+    providers: [PlayerService],
+    exports: [PlayerService],
 })
 export class PlayerModule { }
