@@ -34,7 +34,7 @@ export class PlayerController {
         const roomId = (req.user.coupleRoomId || req.user.roomId)?.toString();
         if (!roomId) throw new Error('No room');
         
-        const state = await this.videoPlayerService.addVideo(roomId, url);
+        const state = await this.videoPlayerService.addVideo(roomId, url, req.user._id);
         
         // Broadcast Socket để đồng bộ thiết bị đối phương
         this.eventsGateway.emitToCoupleRoom(roomId, 'player:queue-updated', {

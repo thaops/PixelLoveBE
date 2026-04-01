@@ -132,9 +132,14 @@ export class VideoPlayerService {
     return state;
   }
 
-  async addVideo(roomId: string, url: string) {
-    const state = await this.getOrRestoreState(roomId);
-    if (!state) throw new BadRequestException('Room not initialized');
+  async addVideo(roomId: string, url: string, userId?: string) {
+    let state = await this.getOrRestoreState(roomId);
+    
+    // Nếu phòng chưa được khởi tạo (lần đầu thêm bài), tự động gọi initState
+    if (!state) {
+      this.logger.log(`Auto-initializing room ${roomId} with first video: ${url}`);
+      return this.initState(roomId, userId || 'system', url, true);
+    }
 
     const videoId = this.extractVideoId(url);
     if (!videoId) throw new BadRequestException('Invalid YouTube URL or videoId');
