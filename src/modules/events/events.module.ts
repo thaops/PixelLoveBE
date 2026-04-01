@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { EventsGateway } from './events.gateway';
 import { User, UserSchema } from '../user/schemas/user.schema';
+import { VideoRoom, VideoRoomSchema } from './schemas/video-room.schema';
 import { getJwtConfig } from '../../config/jwt.config';
 
 /**
@@ -18,7 +19,10 @@ import { getJwtConfig } from '../../config/jwt.config';
       inject: [ConfigService],
       useFactory: getJwtConfig,
     }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: VideoRoom.name, schema: VideoRoomSchema },
+    ]),
   ],
   providers: [EventsGateway],
   exports: [EventsGateway],
